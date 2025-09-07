@@ -9,6 +9,7 @@ type XType = (
 	| { type: "stop" }
 	| { type: "nil" }
 	| { type: "any" }
+	| { type: "auto" }
 ) & { name?: string };
 
 type XTypeToActual<T extends XType> = T["type"] extends "string"
@@ -43,10 +44,34 @@ type OutputToResult<O extends { name: string; type: XType }[]> = {
 	>;
 };
 
+type CallbackX<
+	x extends Record<
+		string,
+		{
+			input: { name: string; type: XType }[];
+			output: { name: string; type: XType }[];
+		}
+	>,
+> = {
+	[K in keyof x]: (
+		args: InputToArgs<x[K]["input"]>,
+	) => OutputToResult<x[K]["output"]>;
+};
+
 type NativeFunction = {
 	input: { name: string; type: XType }[];
 	output: { name: string; type: XType }[];
-	fun: (args: Record<string, unknown>) => Record<string, unknown>;
+	cb?: Record<
+		string,
+		{
+			input: { name: string; type: XType }[];
+			output: { name: string; type: XType }[];
+		}
+	>;
+	fun: (
+		args: Record<string, unknown>,
+		cb: Record<string, () => unknown>,
+	) => Record<string, unknown>;
 };
 
 function newNativeFunction<
@@ -54,11 +79,23 @@ function newNativeFunction<
 	I extends { name: x; type: XType }[],
 	xx extends string,
 	O extends { name: xx; type: XType }[],
+	cbI extends string,
+	cbO extends string,
+	cb extends Record<
+		string,
+		{
+			input: { name: cbI; type: XType }[];
+			output: { name: cbO; type: XType }[];
+		}
+	>,
 >(x: {
 	input: I;
 	output: O;
-	fun: (args: InputToArgs<I>) => OutputToResult<O>;
+	cb?: cb;
+	fun: (args: InputToArgs<I>, cb: CallbackX<cb>) => OutputToResult<O>;
 }) {
+	// @ts-expect-error
+	// todo
 	return x as NativeFunction;
 }
 
@@ -121,13 +158,13 @@ const nativeFunctions: Record<string, NativeFunction> = {
 		input: [
 			{
 				name: "arr",
-				type: { type: "array", subType: { item: { type: "any", name: "I" } } },
+				type: { type: "array", subType: { item: { type: "auto", name: "I" } } },
 			},
 		],
 		output: [
 			{
 				name: "arr",
-				type: { type: "array", subType: { item: { type: "any", name: "O" } } },
+				type: { type: "array", subType: { item: { type: "auto", name: "O" } } },
 			},
 		],
 		cb: {
@@ -135,14 +172,14 @@ const nativeFunctions: Record<string, NativeFunction> = {
 				input: [
 					{
 						name: "item",
-						type: { type: "any", name: "I" },
+						type: { type: "auto", name: "I" },
 					},
 				],
-				output: [{ name: "callback", type: { type: "any", name: "O" } }],
+				output: [{ name: "callback", type: { type: "auto", name: "O" } }],
 			},
 		},
 		fun: (args, cb) => ({
-			arr: args.arr.map(cb.cb),
+			arr: args.arr.map((i) => cb.cb({ item: i }).callback),
 		}),
 	}),
 };
