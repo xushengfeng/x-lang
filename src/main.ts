@@ -117,8 +117,8 @@ newNativeFunction({
 });
 
 type XFunction = {
-	input: { name: string; mapKey: { id: string; key: string } }[];
-	output: { name: string; mapKey: { id: string; key: string } }[];
+	input: { name: string; mapKey: { id: string; key: string }; type: XType }[];
+	output: { name: string; mapKey: { id: string; key: string }; type: XType }[];
 	data: Record<
 		string,
 		{
@@ -185,6 +185,155 @@ const nativeFunctions: Record<string, NativeFunction> = {
 };
 
 function env() {
-	function run(x: XFunction) {}
-	function check(x: XFunction) {}
+	const funs = nativeFunctions;
+	function run(x: XFunction, input: Record<string, unknown>) {}
+	function check(x: XFunction) {
+		const m: { m: string; posi: string[] }[] = [];
+		function addMe(m0: string, posi: string[]) {
+			m.push({ m: m0, posi });
+		}
+
+		let hasNoFunctionError = false;
+		for (const k in x.data) {
+			if (!funs[x.data[k].functionName]) {
+				hasNoFunctionError = true;
+				addMe(`function ${x.data[k].functionName} not found`, [
+					"data",
+					k,
+					"functionName",
+				]);
+			}
+		}
+
+		if (hasNoFunctionError) return m;
+
+		function getF(name: string) {
+			return funs[name];
+		}
+
+		function checkId(id: string, path: string[]) {
+			if (!x.data[id]) {
+				addMe(`id ${id} not found`, path);
+				return false;
+			}
+			return x.data[id];
+		}
+		function checkInput(
+			f: NativeFunction,
+			fName: string,
+			key: string,
+			path: string[],
+		) {
+			const v = f.input.find((i) => i.name === key);
+			if (!v) {
+				addMe(`key ${key} not found in function ${fName}`, path);
+			}
+			// todo cb
+			// todo type
+		}
+		function checkOutput(
+			f: NativeFunction,
+			fName: string,
+			key: string,
+			path: string[],
+		) {
+			const v = f.output.find((i) => i.name === key);
+			if (!v) {
+				addMe(`key ${key} not found in function ${fName}`, path);
+			}
+			// todo cb
+			// todo type
+		}
+
+		for (const [n, item] of x.input.entries()) {
+			const x = checkId(item.mapKey.id, ["input", String(n), "mapKey", "id"]);
+			if (!x) continue;
+			const f = getF(x.functionName);
+			checkInput(f, x.functionName, item.mapKey.key, [
+				"input",
+				String(n),
+				"mapKey",
+				"key",
+			]);
+		}
+		for (const [n, item] of x.output.entries()) {
+			const x = checkId(item.mapKey.id, ["ouput", String(n), "mapKey", "id"]);
+			if (!x) continue;
+			const f = getF(x.functionName);
+			checkOutput(f, x.functionName, item.mapKey.key, [
+				"output",
+				String(n),
+				"mapKey",
+				"key",
+			]);
+		}
+		for (const [n, item] of Object.entries(x.data)) {
+			const thisF = getF(item.functionName);
+			for (const [i, xx] of item.next.entries()) {
+				checkOutput(thisF, item.functionName, xx.fromKey, [
+					"data",
+					String(n),
+					"next",
+					String(i),
+					"fromKey",
+				]);
+				const next = checkId(xx.id, [
+					"data",
+					String(n),
+					"next",
+					String(i),
+					"id",
+				]);
+				if (!next) continue;
+				const nextF = getF(next.functionName);
+				checkInput(nextF, next.functionName, xx.toKey, [
+					"data",
+					String(n),
+					"next",
+					String(i),
+					"toKey",
+				]);
+			}
+		}
+
+		// todo no circle
+		const inputS = new Map<string, Set<string>>();
+		function addInputKey(id: string, keyName: string) {
+			const x = inputS.get(id) ?? new Set();
+			x.add(keyName);
+			inputS.set(id, x);
+		}
+		for (const i of x.input) {
+			addInputKey(i.mapKey.id, i.mapKey.key);
+		}
+		for (const [_, item] of Object.entries(x.data)) {
+			for (const xx of item.next) {
+				addInputKey(xx.id, xx.toKey);
+			}
+		}
+		for (const [n, item] of Object.entries(x.data)) {
+			const f = getF(item.functionName);
+			const fk = inputS.get(n) ?? new Set();
+			const noInK = f.input.filter((i) => !fk.has(i.name)); // todo cb
+			if (noInK.length) {
+				addMe(
+					`${item.functionName} input key not has ${noInK.map((i) => i.name).join(", ")}`,
+					["data", n],
+				);
+			}
+		}
+
+		return m.length ? m : null;
+	}
+	return {
+		run,
+		checkStrict: (x: XFunction) => {
+			const r = check(x);
+			if (r) {
+				console.log(r);
+				return;
+			}
+			return x;
+		},
+	};
 }
