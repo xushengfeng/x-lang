@@ -1,5 +1,5 @@
-import { env } from "../src/main.ts";
 import { assertEquals } from "jsr:@std/assert";
+import { env } from "../src/main.ts";
 
 Deno.test({
 	name: "simple",

@@ -1,4 +1,4 @@
-export { env, newNativeFunction };
+export { env, newNativeFunction, type XFunction };
 
 type XType = (
 	| { type: "string" }
@@ -205,10 +205,10 @@ function env() {
 			frames.set(id, f);
 		}
 
-		for (const [inputK, inputV] of Object.entries(input)) {
-			const inputX = x.input.find((i) => i.name === inputK);
-			if (!inputX) throw new Error(`input ${inputK} not found`);
-			addFrame(inputX.mapKey.id, inputX.mapKey.key, inputV);
+		for (const i of x.input) {
+			const inputV = input[i.name];
+			if (!inputV) log.warn(`input ${i.name} not found`);
+			else addFrame(i.mapKey.id, i.mapKey.key, inputV);
 		}
 
 		let maxRun = 1000;
@@ -304,7 +304,10 @@ function env() {
 		) {
 			const v = f.input.find((i) => i.name === key);
 			if (!v) {
-				addMe(`key ${key} not found in function ${fName}`, path);
+				addMe(
+					`key ${key} not found in function ${fName} only ${f.input.map((i) => i.name).join(", ")}`,
+					path,
+				);
 			}
 			// todo cb
 			// todo type
@@ -317,7 +320,10 @@ function env() {
 		) {
 			const v = f.output.find((i) => i.name === key);
 			if (!v) {
-				addMe(`key ${key} not found in function ${fName}`, path);
+				addMe(
+					`key ${key} not found in function ${fName} only ${f.output.map((i) => i.name).join(", ")}`,
+					path,
+				);
 			}
 			// todo cb
 			// todo type
