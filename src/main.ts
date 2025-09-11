@@ -70,7 +70,7 @@ type NativeFunction = {
 	>;
 	fun: (
 		args: Record<string, unknown>,
-		cb: Record<string, () => unknown>,
+		cb: Record<string, (args: Record<string, unknown>) => unknown>,
 	) => Record<string, unknown>;
 };
 
@@ -186,7 +186,85 @@ const nativeFunctions: Record<string, NativeFunction> = {
 
 function env() {
 	const funs = nativeFunctions;
-	function run(x: XFunction, input: Record<string, unknown>) {}
+
+	const log = {
+		log: console.log,
+		error: console.error,
+		warn: console.warn,
+		info: console.info,
+		debug: console.debug,
+	};
+
+	function run(x: XFunction, input: Record<string, unknown>) {
+		const frames = new Map<string, Map<string, unknown>>();
+		const outputs: Record<string, unknown> = {};
+
+		function addFrame(id: string, key: string, value: unknown) {
+			const f = frames.get(id) ?? new Map();
+			f.set(key, value);
+			frames.set(id, f);
+		}
+
+		for (const [inputK, inputV] of Object.entries(input)) {
+			const inputX = x.input.find((i) => i.name === inputK);
+			if (!inputX) throw new Error(`input ${inputK} not found`);
+			addFrame(inputX.mapKey.id, inputX.mapKey.key, inputV);
+		}
+
+		let maxRun = 1000;
+
+		while (true) {
+			const nowFrameKey = frames.keys().next();
+			if (nowFrameKey.done) break;
+
+			maxRun--;
+			if (maxRun <= 0) {
+				log.error("max run exceeded");
+				break;
+			}
+
+			const nowFrameId = nowFrameKey.value;
+			// biome-ignore lint/style/noNonNullAssertion: check function had checked all
+			const nowFrame = frames.get(nowFrameId)!;
+			const nowX = x.data[nowFrameId];
+			const f = funs[nowX.functionName];
+
+			// if args count
+			const argsCountEqual = f.input.every((i) => nowFrame.has(i.name));
+			// pack callback
+			const cb = Object.fromEntries(
+				Object.entries(f.cb ?? {}).map(([k, v]) => {
+					// todo slice
+					return [
+						k,
+						(x: Record<string, unknown>) =>
+							run({ input: [], output: [], data: {} }, x),
+					];
+				}),
+			);
+			// run
+			const args = Object.fromEntries(
+				f.input.map((i) => [i.name, nowFrame.get(i.name)]),
+			);
+			const res = f.fun(args, cb);
+			// add next frame
+			for (const next of nowX.next) {
+				// todo stop
+				addFrame(next.id, next.toKey, res[next.fromKey]);
+			}
+			// set output
+			const o = x.output.find((i) => i.mapKey.id === nowFrameId);
+			if (o) {
+				outputs[o.name] = res[o.mapKey.key];
+			}
+
+			frames.delete(nowFrameId);
+			if (!argsCountEqual) {
+				frames.set(nowFrameId, nowFrame);
+			}
+		}
+		return outputs;
+	}
 	function check(x: XFunction) {
 		const m: { m: string; posi: string[] }[] = [];
 		function addMe(m0: string, posi: string[]) {

@@ -1,4 +1,5 @@
 import { env } from "../src/main.ts";
+import { assertEquals } from "jsr:@std/assert";
 
 Deno.test({
 	name: "simple",
@@ -9,6 +10,11 @@ Deno.test({
 				{
 					name: "it",
 					mapKey: { id: "0", key: "str" },
+					type: { type: "string" },
+				},
+				{
+					name: "sep",
+					mapKey: { id: "1", key: "sep" },
 					type: { type: "string" },
 				},
 			],
@@ -30,6 +36,10 @@ Deno.test({
 				},
 			},
 		});
-		if (x) e.run(x, { it: "a b c" });
+		if (x) {
+			const r = e.run(x, { it: "a b c", sep: " " });
+			console.log(r);
+			assertEquals(r, { out: "a b c" });
+		}
 	},
 });
