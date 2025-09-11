@@ -197,6 +197,26 @@ const nativeFunctions: Record<string, NativeFunction> = {
 	}),
 };
 
+function slice(fromIds: string[], toIds: string[], data: XFunction["data"]) {
+	const subData: XFunction["data"] = {};
+	const ids = structuredClone(fromIds);
+	const endIds = [];
+	for (let _i = 0; _i <= Object.keys(data).length; _i++) {
+		const id = ids.shift();
+		if (!id) break;
+		const v = data[id];
+		subData[id] = v;
+		for (const i of v.next) {
+			if (toIds.includes(i.id)) {
+				endIds.push(id);
+				continue;
+			}
+			ids.push(i.id);
+		}
+	}
+	return { subData, endIds };
+}
+
 function env() {
 	const funs = nativeFunctions;
 
@@ -208,21 +228,8 @@ function env() {
 		debug: console.debug,
 	};
 
-	function run(x: XFunction, input: Record<string, unknown>) {
-		const frames = new Map<string, Map<string, unknown>>();
+	function run0(x: XFunction, frames: Map<string, Map<string, unknown>>) {
 		const outputs: Record<string, unknown> = {};
-
-		function addFrame(id: string, key: string, value: unknown) {
-			const f = frames.get(id) ?? new Map();
-			f.set(key, value);
-			frames.set(id, f);
-		}
-
-		for (const i of x.input) {
-			const inputV = input[i.name];
-			if (!inputV) throw new Error(`input ${i.name} not found`);
-			else addFrame(i.mapKey.id, i.mapKey.key, inputV);
-		}
 
 		let maxRun = 1000;
 
@@ -244,31 +251,100 @@ function env() {
 
 			// if args count
 			const argsCountEqual = f.input.every((i) => nowFrame.has(i.name));
-			// pack callback
-			const cb = Object.fromEntries(
-				Object.entries(f.cb ?? {}).map(([k, v]) => {
-					// todo slice
-					return [
-						k,
-						(x: Record<string, unknown>) =>
-							run({ input: [], output: [], data: {} }, x),
-					];
-				}),
-			);
-			// run
-			const args = Object.fromEntries(
-				f.input.map((i) => [i.name, nowFrame.get(i.name)]),
-			);
-			const res = f.fun(args, cb);
-			// add next frame
-			for (const next of nowX.next) {
-				// todo stop
-				addFrame(next.id, next.toKey, res[next.fromKey]);
-			}
-			// set output
-			const o = x.output.find((i) => i.mapKey.id === nowFrameId);
-			if (o) {
-				outputs[o.name] = res[o.mapKey.key];
+
+			if (argsCountEqual) {
+				const { o: normalNext, cb: cbNext } = Object.groupBy(
+					nowX.next,
+					(next) =>
+						f.output.find((i) => i.name === next.fromKey) ? "o" : "cb",
+				);
+				// pack callback
+				// todo check cb args is full
+				const { subData, endIds } = slice(
+					(cbNext ?? []).map((i) => i.id),
+					[nowFrameId],
+					x.data,
+				);
+				const cb = Object.fromEntries(
+					Object.entries(f.cb ?? {}).map(([k, v]) => {
+						const rundata: XFunction = {
+							input: v.input.map((i) => {
+								const n = (cbNext ?? []).find((n) => n.fromKey === i.name);
+								if (!n) throw new Error(`callback input ${i.name} not found`);
+								return {
+									name: i.name,
+									mapKey: {
+										id: n.id,
+										key: n.toKey,
+									},
+									type: i.type,
+								};
+							}),
+							output: v.output.flatMap((i) => {
+								const x = endIds.find((id) =>
+									subData[id].next.find((n) => n.toKey === i.name),
+								);
+								if (!x) throw new Error(`callback output ${i.name} not found`);
+								return {
+									name: i.name,
+									mapKey: {
+										id: x[0],
+										// biome-ignore lint/style/noNonNullAssertion: I am confident that this key exists at last line
+										key: subData[x].next.find((n) => n.toKey === i.name)!
+											.fromKey,
+									},
+									type: i.type,
+								};
+							}),
+							data: Object.fromEntries(
+								Object.entries(subData).map(([k, { functionName, next }]) => [
+									k,
+									{
+										functionName,
+										next: next.filter((i) => i.id !== nowFrameId),
+									},
+								]),
+							),
+						};
+
+						return [
+							k,
+							(x: Record<string, unknown>) => {
+								const subFrames = new Map<string, Map<string, unknown>>();
+								for (const [k, v] of frames) {
+									if (subData[k]) {
+										subFrames.set(k, structuredClone(v));
+									}
+								}
+								for (const i of rundata.input) {
+									const inputV = x[i.name];
+									if (!inputV) throw new Error(`input ${i.name} not found`);
+									else addFrame(subFrames, i.mapKey.id, i.mapKey.key, inputV);
+								}
+								return run0(rundata, subFrames);
+							},
+						];
+					}),
+				);
+
+				// run
+				const args = Object.fromEntries(
+					f.input.map((i) => [i.name, nowFrame.get(i.name)]),
+				);
+				const res = f.fun(args, cb);
+				for (const i of Object.keys(subData)) {
+					frames.delete(i);
+				}
+				// add next frame
+				for (const next of normalNext ?? []) {
+					// todo stop
+					addFrame(frames, next.id, next.toKey, res[next.fromKey]);
+				}
+				// set output
+				const o = x.output.find((i) => i.mapKey.id === nowFrameId);
+				if (o) {
+					outputs[o.name] = res[o.mapKey.key];
+				}
 			}
 
 			frames.delete(nowFrameId);
@@ -278,6 +354,30 @@ function env() {
 		}
 		return outputs;
 	}
+
+	function addFrame(
+		frames: Map<string, Map<string, unknown>>,
+		id: string,
+		key: string,
+		value: unknown,
+	) {
+		const f = frames.get(id) ?? new Map();
+		f.set(key, value);
+		frames.set(id, f);
+	}
+
+	function run(x: XFunction, input: Record<string, unknown>) {
+		const frames = new Map<string, Map<string, unknown>>();
+
+		for (const i of x.input) {
+			const inputV = input[i.name];
+			if (!inputV) throw new Error(`input ${i.name} not found`);
+			else addFrame(frames, i.mapKey.id, i.mapKey.key, inputV);
+		}
+
+		return run0(x, frames);
+	}
+
 	function check(x: XFunction) {
 		const m: { m: string; posi: string[] }[] = [];
 		function addMe(m0: string, posi: string[]) {
