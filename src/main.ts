@@ -220,7 +220,7 @@ function env() {
 
 		for (const i of x.input) {
 			const inputV = input[i.name];
-			if (!inputV) log.warn(`input ${i.name} not found`);
+			if (!inputV) throw new Error(`input ${i.name} not found`);
 			else addFrame(i.mapKey.id, i.mapKey.key, inputV);
 		}
 
@@ -315,14 +315,17 @@ function env() {
 			key: string,
 			path: string[],
 		) {
-			const v = f.input.find((i) => i.name === key);
+			const v =
+				f.input.find((i) => i.name === key) ||
+				Object.values(f.cb || {}).find((i) =>
+					i.output.find((o) => o.name === key),
+				);
 			if (!v) {
 				addMe(
 					`key ${key} not found in function ${fName} only ${f.input.map((i) => i.name).join(", ")}`,
 					path,
 				);
 			}
-			// todo cb
 			// todo type
 		}
 		function checkOutput(
@@ -331,14 +334,17 @@ function env() {
 			key: string,
 			path: string[],
 		) {
-			const v = f.output.find((i) => i.name === key);
+			const v =
+				f.output.find((i) => i.name === key) ||
+				Object.values(f.cb || {}).find((i) =>
+					i.input.find((o) => o.name === key),
+				);
 			if (!v) {
 				addMe(
 					`key ${key} not found in function ${fName} only ${f.output.map((i) => i.name).join(", ")}`,
 					path,
 				);
 			}
-			// todo cb
 			// todo type
 		}
 
