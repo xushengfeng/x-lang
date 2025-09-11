@@ -154,6 +154,19 @@ const nativeFunctions: Record<string, NativeFunction> = {
 			str: args.arr.join(args.sep),
 		}),
 	}),
+	"str.repeat": newNativeFunction({
+		input: [
+			{
+				name: "str",
+				type: { type: "string" },
+			},
+			{ name: "repeatNum", type: { type: "num" } },
+		],
+		output: [{ name: "str", type: { type: "string" } }],
+		fun: (args) => ({
+			str: args.str.repeat(args.repeatNum),
+		}),
+	}),
 	"array.map": newNativeFunction({
 		input: [
 			{

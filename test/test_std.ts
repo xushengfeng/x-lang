@@ -84,3 +84,35 @@ Deno.test({
 		);
 	},
 });
+
+Deno.test({
+	name: "str.repeat",
+	fn: () => {
+		runF(
+			"str.repeat",
+			{
+				input: [
+					{
+						name: "it",
+						mapKey: { id: "0", key: "str" },
+						type: { type: "string" },
+					},
+					{
+						name: "repeatNum",
+						mapKey: { id: "0", key: "repeatNum" },
+						type: { type: "num" },
+					},
+				],
+				output: [
+					{
+						name: "out",
+						mapKey: { id: "0", key: "str" },
+						type: { type: "string" },
+					},
+				],
+			},
+			{ it: "hello", repeatNum: 2 },
+			{ out: "hellohello" },
+		);
+	},
+});
