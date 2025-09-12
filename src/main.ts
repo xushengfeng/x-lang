@@ -276,6 +276,132 @@ const nativeFunctions: Record<string, NativeFunction> = {
 			result: Math.random(),
 		}),
 	}),
+	"math.floor": newNativeFunction({
+		input: [{ name: "a", type: { type: "num" } }],
+		output: [
+			{
+				name: "out",
+				type: { type: "num" },
+			},
+		],
+		fun: (args) => ({
+			out: Math.floor(args.a),
+		}),
+	}),
+	"math.ceil": newNativeFunction({
+		input: [{ name: "a", type: { type: "num" } }],
+		output: [
+			{
+				name: "out",
+				type: { type: "num" },
+			},
+		],
+		fun: (args) => ({
+			out: Math.ceil(args.a),
+		}),
+	}),
+	"math.round": newNativeFunction({
+		input: [{ name: "a", type: { type: "num" } }],
+		output: [
+			{
+				name: "out",
+				type: { type: "num" },
+			},
+		],
+		fun: (args) => ({
+			out: Math.round(args.a),
+		}),
+	}),
+	"math.eq": newNativeFunction({
+		input: [
+			{ name: "a", type: { type: "num" } },
+			{ name: "b", type: { type: "num" } },
+		],
+		output: [
+			{
+				name: "out",
+				type: { type: "bool" },
+			},
+		],
+		fun: (args) => ({
+			out: args.a === args.b,
+		}),
+	}),
+	"math.neq": newNativeFunction({
+		input: [
+			{ name: "a", type: { type: "num" } },
+			{ name: "b", type: { type: "num" } },
+		],
+		output: [
+			{
+				name: "out",
+				type: { type: "bool" },
+			},
+		],
+		fun: (args) => ({
+			out: args.a !== args.b,
+		}),
+	}),
+	"math.less": newNativeFunction({
+		input: [
+			{ name: "a", type: { type: "num" } },
+			{ name: "b", type: { type: "num" } },
+		],
+		output: [
+			{
+				name: "out",
+				type: { type: "bool" },
+			},
+		],
+		fun: (args) => ({
+			out: args.a < args.b,
+		}),
+	}),
+	"math.greater": newNativeFunction({
+		input: [
+			{ name: "a", type: { type: "num" } },
+			{ name: "b", type: { type: "num" } },
+		],
+		output: [
+			{
+				name: "out",
+				type: { type: "bool" },
+			},
+		],
+		fun: (args) => ({
+			out: args.a > args.b,
+		}),
+	}),
+	"math.lessEq": newNativeFunction({
+		input: [
+			{ name: "a", type: { type: "num" } },
+			{ name: "b", type: { type: "num" } },
+		],
+		output: [
+			{
+				name: "out",
+				type: { type: "bool" },
+			},
+		],
+		fun: (args) => ({
+			out: args.a <= args.b,
+		}),
+	}),
+	"math.greaterEq": newNativeFunction({
+		input: [
+			{ name: "a", type: { type: "num" } },
+			{ name: "b", type: { type: "num" } },
+		],
+		output: [
+			{
+				name: "out",
+				type: { type: "bool" },
+			},
+		],
+		fun: (args) => ({
+			out: args.a >= args.b,
+		}),
+	}),
 	"str.split": newNativeFunction({
 		input: [{ name: "str", type: { type: "string" } }],
 		output: [

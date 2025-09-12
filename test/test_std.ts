@@ -188,6 +188,54 @@ Deno.test({
 	},
 });
 Deno.test({
+	name: "math.floor",
+	fn: () => {
+		runF("math.floor", {
+			input: { a: { value: 9.8 } },
+			output: { out: { value: 9 } },
+		});
+	},
+});
+Deno.test({
+	name: "math.ceil",
+	fn: () => {
+		runF("math.ceil", {
+			input: { a: { value: 9.8 } },
+			output: { out: { value: 10 } },
+		});
+	},
+});
+Deno.test({
+	name: "math.round",
+	fn: () => {
+		runF("math.round", {
+			input: { a: { value: 9.8 } },
+			output: { out: { value: 10 } },
+		});
+	},
+});
+Deno.test({
+	name: "math.eqs",
+	fn: () => {
+		const a = 10;
+		const l = [-1, 0, 10, 11];
+		function x(name: string, f: (a: number, b: number) => boolean) {
+			for (const b of l) {
+				runF(name, {
+					input: { a: { value: a }, b: { value: b } },
+					output: { out: { value: f(a, b) } },
+				});
+			}
+		}
+		x("math.eq", (a, b) => a === b);
+		x("math.neq", (a, b) => a !== b);
+		x("math.less", (a, b) => a < b);
+		x("math.greater", (a, b) => a > b);
+		x("math.lessEq", (a, b) => a <= b);
+		x("math.greaterEq", (a, b) => a >= b);
+	},
+});
+Deno.test({
 	name: "str.split",
 	fn: () => {
 		runF("str.split", {
