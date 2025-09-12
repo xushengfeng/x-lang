@@ -7,6 +7,7 @@ function runF(
 		input: Record<string, { value: unknown }>;
 		output: Record<string, { value: unknown }>;
 	},
+	_with?: XFunction["data"],
 ) {
 	const e = env();
 	const i = Object.fromEntries(
@@ -31,6 +32,7 @@ function runF(
 				functionName: name,
 				next: [],
 			},
+			..._with,
 		},
 	});
 	if (x) {
@@ -460,5 +462,203 @@ Deno.test({
 				arr: { value: [3, 2, 1, 0] },
 			},
 		});
+	},
+});
+
+Deno.test({
+	name: "array.sort",
+	fn: () => {
+		runF(
+			"array.sort",
+			{
+				input: {
+					arr: {
+						value: [3, 1, 4, 1, 5, 9, 2, 6, 5, 3, 5],
+					},
+				},
+				output: {
+					arr: {
+						value: [3, 1, 4, 1, 5, 9, 2, 6, 5, 3, 5].toSorted((a, b) => a - b),
+					},
+				},
+			},
+			{
+				sub: {
+					functionName: "math.subtract",
+					next: [{ id: "0", fromKey: "result", toKey: "callback" }],
+				},
+				0: {
+					functionName: "array.sort",
+					next: [
+						{ id: "sub", fromKey: "itemA", toKey: "a" },
+						{ id: "sub", fromKey: "itemB", toKey: "b" },
+					],
+				},
+			},
+		);
+	},
+});
+
+Deno.test({
+	name: "array.map",
+	fn: () => {
+		runF(
+			"array.map",
+			{
+				input: {
+					arr: {
+						value: [3, 1, 4, 1, 5, 9, 2, 6, 5, 3, 5],
+					},
+				},
+				output: {
+					arr: {
+						value: [3, 1, 4, 1, 5, 9, 2, 6, 5, 3, 5].map((i) => i * 2),
+					},
+				},
+			},
+			{
+				m: {
+					functionName: "math.multiply",
+					next: [{ id: "0", fromKey: "result", toKey: "callback" }],
+					defaultValues: { b: 2 },
+				},
+				0: {
+					functionName: "array.map",
+					next: [{ id: "m", fromKey: "item", toKey: "a" }],
+				},
+			},
+		);
+	},
+});
+
+Deno.test({
+	name: "array.reduce",
+	fn: () => {
+		runF(
+			"array.reduce",
+			{
+				input: {
+					arr: {
+						value: [3, 1, 4, 1, 5, 9, 2, 6, 5, 3, 5],
+					},
+				},
+				output: {
+					out: {
+						value: [3, 1, 4, 1, 5, 9, 2, 6, 5, 3, 5].reduce(
+							(acc, i) => acc + i,
+						),
+					},
+				},
+			},
+			{
+				m: {
+					functionName: "math.add",
+					next: [{ id: "0", fromKey: "result", toKey: "callback" }],
+				},
+				0: {
+					functionName: "array.reduce",
+					next: [
+						{ id: "m", fromKey: "item", toKey: "a" },
+						{ id: "m", fromKey: "prev", toKey: "b" },
+					],
+				},
+			},
+		);
+	},
+});
+
+Deno.test({
+	name: "array.filter",
+	fn: () => {
+		runF(
+			"array.filter",
+			{
+				input: {
+					arr: {
+						value: [3, 1, 4, 1, 5, 9, 2, 6, 5, 3, 5],
+					},
+				},
+				output: {
+					arr: {
+						value: [3, 1, 4, 1, 5, 9, 2, 6, 5, 3, 5].filter((i) => i > 3),
+					},
+				},
+			},
+			{
+				m: {
+					functionName: "math.greater",
+					next: [{ id: "0", fromKey: "out", toKey: "callback" }],
+					defaultValues: { b: 3 },
+				},
+				0: {
+					functionName: "array.filter",
+					next: [{ id: "m", fromKey: "item", toKey: "a" }],
+				},
+			},
+		);
+	},
+});
+
+Deno.test({
+	name: "array.find",
+	fn: () => {
+		runF(
+			"array.find",
+			{
+				input: {
+					arr: {
+						value: [3, 1, 4, 1, 5, 9, 2, 6, 5, 3, 5],
+					},
+				},
+				output: {
+					item: {
+						value: [3, 1, 4, 1, 5, 9, 2, 6, 5, 3, 5].find((i) => i > 3),
+					},
+				},
+			},
+			{
+				m: {
+					functionName: "math.greater",
+					next: [{ id: "0", fromKey: "out", toKey: "callback" }],
+					defaultValues: { b: 3 },
+				},
+				0: {
+					functionName: "array.find",
+					next: [{ id: "m", fromKey: "item", toKey: "a" }],
+				},
+			},
+		);
+	},
+});
+
+Deno.test({
+	name: "array.findIndex",
+	fn: () => {
+		runF(
+			"array.findIndex",
+			{
+				input: {
+					arr: {
+						value: [3, 1, 4, 1, 5, 9, 2, 6, 5, 3, 5],
+					},
+				},
+				output: {
+					index: {
+						value: [3, 1, 4, 1, 5, 9, 2, 6, 5, 3, 5].findIndex((i) => i > 3),
+					},
+				},
+			},
+			{
+				m: {
+					functionName: "math.greater",
+					next: [{ id: "0", fromKey: "out", toKey: "callback" }],
+					defaultValues: { b: 3 },
+				},
+				0: {
+					functionName: "array.findIndex",
+					next: [{ id: "m", fromKey: "item", toKey: "a" }],
+				},
+			},
+		);
 	},
 });

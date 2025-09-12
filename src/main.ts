@@ -692,6 +692,137 @@ const nativeFunctions: Record<string, NativeFunction> = {
 			arr: args.arr.map((i) => cb.cb({ item: i }).callback),
 		}),
 	}),
+	"array.reduce": newNativeFunction({
+		input: [
+			{
+				name: "arr",
+				type: { type: "array", subType: { item: { type: "auto", name: "I" } } },
+			},
+		],
+		output: [
+			{
+				name: "out",
+				type: { type: "auto", name: "I" },
+			},
+		],
+		cb: {
+			cb: {
+				input: [
+					{
+						name: "prev",
+						type: { type: "auto", name: "I" },
+					},
+					{
+						name: "item",
+						type: { type: "auto", name: "I" },
+					},
+				],
+				output: [{ name: "callback", type: { type: "auto", name: "O" } }],
+			},
+		},
+		fun: (args, cb) => ({
+			out: args.arr.reduce((p, i) => cb.cb({ prev: p, item: i }).callback),
+		}),
+	}),
+	"array.filter": newNativeFunction({
+		input: [
+			{
+				name: "arr",
+				type: { type: "array", subType: { item: { type: "auto", name: "I" } } },
+			},
+		],
+		output: [
+			{
+				name: "arr",
+				type: { type: "array", subType: { item: { type: "auto", name: "I" } } },
+			},
+		],
+		cb: {
+			cb: {
+				input: [
+					{
+						name: "item",
+						type: { type: "auto", name: "I" },
+					},
+				],
+				output: [{ name: "callback", type: { type: "bool" } }],
+			},
+		},
+		fun: (args, cb) => ({
+			arr: args.arr.filter((i) => cb.cb({ item: i }).callback),
+		}),
+	}),
+	"array.find": newNativeFunction({
+		input: [
+			{
+				name: "arr",
+				type: { type: "array", subType: { item: { type: "auto", name: "I" } } },
+			},
+		],
+		output: [
+			{
+				name: "item",
+				type: {
+					type: "or",
+					subType: {
+						left: { type: "auto", name: "I" },
+						right: { type: "nil" },
+					},
+				},
+			},
+		],
+		cb: {
+			cb: {
+				input: [
+					{
+						name: "item",
+						type: { type: "auto", name: "I" },
+					},
+				],
+				output: [{ name: "callback", type: { type: "bool" } }],
+			},
+		},
+		fun: (args, cb) => ({
+			item: args.arr.find((i) => cb.cb({ item: i }).callback) ?? null,
+		}),
+	}),
+	"array.findIndex": newNativeFunction({
+		input: [
+			{
+				name: "arr",
+				type: { type: "array", subType: { item: { type: "auto", name: "I" } } },
+			},
+		],
+		output: [
+			{
+				name: "index",
+				type: {
+					type: "or",
+					subType: {
+						left: { type: "num" },
+						right: { type: "nil" },
+					},
+				},
+			},
+		],
+		cb: {
+			cb: {
+				input: [
+					{
+						name: "item",
+						type: { type: "auto", name: "I" },
+					},
+				],
+				output: [{ name: "callback", type: { type: "bool" } }],
+			},
+		},
+		fun: (args, cb) => {
+			const v = args.arr.findIndex((i) => cb.cb({ item: i }).callback);
+			return {
+				index: v === -1 ? null : v,
+			};
+		},
+	}),
 };
 
 function slice(fromIds: string[], toIds: string[], data: XFunction["data"]) {
