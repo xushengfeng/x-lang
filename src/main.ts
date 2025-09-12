@@ -130,6 +130,7 @@ type XFunction = {
 		{
 			functionName: string;
 			next: { id: string; fromKey: string; toKey: string }[];
+			defaultValues?: Record<string, unknown>;
 		}
 	>;
 };
@@ -662,6 +663,17 @@ function slice(fromIds: string[], toIds: string[], data: XFunction["data"]) {
 	return { subData, endIds };
 }
 
+function findHeads(data: XFunction["data"]) {
+	const heads = new Set<string>();
+	for (const id of Object.keys(data)) heads.add(id);
+	for (const [_, v] of Object.entries(data)) {
+		for (const n of v.next) {
+			heads.delete(n.id);
+		}
+	}
+	return { heads };
+}
+
 function env() {
 	const funs = nativeFunctions;
 
@@ -695,7 +707,10 @@ function env() {
 			const f = funs[nowX.functionName];
 
 			// if args count
-			const argsCountEqual = f.input.every((i) => nowFrame.has(i.name));
+			const argsCountEqual = f.input.every(
+				(i) =>
+					nowFrame.has(i.name) || nowX.defaultValues?.[i.name] !== undefined,
+			);
 
 			if (argsCountEqual) {
 				const { o: normalNext, cb: cbNext } = Object.groupBy(
@@ -742,11 +757,11 @@ function env() {
 								};
 							}),
 							data: Object.fromEntries(
-								Object.entries(subData).map(([k, { functionName, next }]) => [
+								Object.entries(subData).map(([k, v]) => [
 									k,
 									{
-										functionName,
-										next: next.filter((i) => i.id !== nowFrameId),
+										...v,
+										next: v.next.filter((i) => i.id !== nowFrameId),
 									},
 								]),
 							),
@@ -774,7 +789,10 @@ function env() {
 
 				// run
 				const args = Object.fromEntries(
-					f.input.map((i) => [i.name, nowFrame.get(i.name)]),
+					f.input.map((i) => [
+						i.name,
+						nowFrame.get(i.name) ?? nowX.defaultValues?.[i.name],
+					]),
 				);
 				const res = f.fun(args, cb);
 				for (const i of Object.keys(subData)) {
@@ -821,6 +839,11 @@ function env() {
 			else addFrame(frames, i.mapKey.id, i.mapKey.key, inputV);
 		}
 
+		const { heads } = findHeads(x.data);
+		for (const id of heads) {
+			if (!frames.has(id)) frames.set(id, new Map());
+		}
+
 		return run0(x, frames);
 	}
 
@@ -831,10 +854,10 @@ function env() {
 		}
 
 		let hasNoFunctionError = false;
-		for (const k in x.data) {
-			if (!funs[x.data[k].functionName]) {
+		for (const [k, v] of Object.entries(x.data)) {
+			if (!funs[v.functionName]) {
 				hasNoFunctionError = true;
-				addMe(`function ${x.data[k].functionName} not found`, [
+				addMe(`function ${v.functionName} not found`, [
 					"data",
 					k,
 					"functionName",
@@ -918,6 +941,14 @@ function env() {
 		}
 		for (const [n, item] of Object.entries(x.data)) {
 			const thisF = getF(item.functionName);
+			for (const k of Object.keys(item.defaultValues ?? {})) {
+				checkInput(thisF, item.functionName, k, [
+					"data",
+					String(n),
+					"defaultValues",
+					k,
+				]);
+			}
 			for (const [i, xx] of item.next.entries()) {
 				checkOutput(thisF, item.functionName, xx.fromKey, [
 					"data",
@@ -963,6 +994,9 @@ function env() {
 		for (const [n, item] of Object.entries(x.data)) {
 			const f = getF(item.functionName);
 			const fk = inputS.get(n) ?? new Set();
+			for (const x of Object.keys(item.defaultValues ?? {})) {
+				fk.add(x);
+			}
 			const noInK = f.input.filter((i) => !fk.has(i.name)); // todo cb
 			if (noInK.length) {
 				addMe(
