@@ -761,7 +761,7 @@ const nativeFunctions: Record<string, NativeFunction> = {
 		],
 		output: [
 			{
-				name: "item",
+				name: "result",
 				type: {
 					type: "or",
 					subType: {
@@ -783,7 +783,7 @@ const nativeFunctions: Record<string, NativeFunction> = {
 			},
 		},
 		fun: (args, cb) => ({
-			item: args.arr.find((i) => cb.cb({ item: i }).callback) ?? null,
+			result: args.arr.find((i) => cb.cb({ item: i }).callback) ?? null,
 		}),
 	}),
 	"array.findIndex": newNativeFunction({
@@ -824,6 +824,40 @@ const nativeFunctions: Record<string, NativeFunction> = {
 		},
 	}),
 };
+
+function checkData(data: NativeFunction) {
+	const inputNames = new Set<string>();
+	const outputNames = new Set<string>();
+	const m: string[] = [];
+	for (const i of data.input) {
+		if (inputNames.has(i.name)) {
+			m.push(`input ${i.name} is duplicated`);
+		}
+		inputNames.add(i.name);
+	}
+	for (const i of data.output) {
+		if (outputNames.has(i.name)) {
+			m.push(`output ${i.name} is duplicated`);
+		}
+		outputNames.add(i.name);
+	}
+
+	for (const x of Object.values(data.cb ?? {})) {
+		for (const i of x.output) {
+			if (inputNames.has(i.name)) {
+				m.push(`cb output ${i.name} is duplicated with input ${i.name}`);
+			}
+			inputNames.add(i.name);
+		}
+		for (const i of x.input) {
+			if (outputNames.has(i.name)) {
+				m.push(`cb input ${i.name} is duplicated with output ${i.name}`);
+			}
+			outputNames.add(i.name);
+		}
+	}
+	return m.length ? m : null;
+}
 
 function slice(fromIds: string[], toIds: string[], data: XFunction["data"]) {
 	const subData: XFunction["data"] = {};
@@ -1196,6 +1230,17 @@ function env() {
 
 		return m.length ? m : null;
 	}
+
+	if (true) {
+		// todo only run in test
+		for (const [k, v] of Object.entries(nativeFunctions)) {
+			const x = checkData(v);
+			if (x) {
+				console.log(`${k}`, x);
+			}
+		}
+	}
+
 	return {
 		run,
 		checkStrict: (x: XFunction) => {
