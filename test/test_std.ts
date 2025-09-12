@@ -3,14 +3,29 @@ import { env, type XFunction } from "../src/main.ts";
 
 function runF(
 	name: string,
-	op: { input: XFunction["input"]; output: XFunction["output"] },
-	i: Record<string, unknown>,
-	o: Record<string, unknown>,
+	op: {
+		input: Record<string, { value: unknown }>;
+		output: Record<string, { value: unknown }>;
+	},
 ) {
 	const e = env();
+	const i = Object.fromEntries(
+		Object.entries(op.input).map(([k, v]) => [k, v.value]),
+	);
+	const o = Object.fromEntries(
+		Object.entries(op.output).map(([k, v]) => [k, v.value]),
+	);
 	const x = e.checkStrict({
-		input: op.input,
-		output: op.output,
+		input: Object.keys(op.input).map((k) => ({
+			mapKey: { id: "0", key: k },
+			type: { type: "any" },
+			name: k,
+		})),
+		output: Object.keys(op.output).map((k) => ({
+			mapKey: { id: "0", key: k },
+			type: { type: "any" },
+			name: k,
+		})),
 		data: {
 			"0": {
 				functionName: name,
@@ -29,90 +44,57 @@ function runF(
 Deno.test({
 	name: "str.split",
 	fn: () => {
-		runF(
-			"str.split",
-			{
-				input: [
-					{
-						name: "it",
-						mapKey: { id: "0", key: "str" },
-						type: { type: "string" },
-					},
-				],
-				output: [
-					{
-						name: "out",
-						mapKey: { id: "0", key: "arr" },
-						type: { type: "array", subType: { item: { type: "string" } } },
-					},
-				],
+		runF("str.split", {
+			input: {
+				str: { value: "a b c" },
 			},
-			{ it: "a b c" },
-			{ out: ["a", "b", "c"] },
-		);
+			output: {
+				arr: {
+					value: ["a", "b", "c"],
+				},
+			},
+		});
 	},
 });
 
 Deno.test({
 	name: "str.join",
 	fn: () => {
-		runF(
-			"str.join",
-			{
-				input: [
-					{
-						name: "it",
-						mapKey: { id: "0", key: "arr" },
-						type: { type: "array", subType: { item: { type: "string" } } },
-					},
-					{
-						name: "sep",
-						mapKey: { id: "0", key: "sep" },
-						type: { type: "string" },
-					},
-				],
-				output: [
-					{
-						name: "out",
-						mapKey: { id: "0", key: "str" },
-						type: { type: "string" },
-					},
-				],
+		runF("str.join", {
+			input: {
+				arr: {
+					value: ["a", "b", "c"],
+				},
+				sep: {
+					value: ",",
+				},
 			},
-			{ it: ["a", "b", "c"], sep: "," },
-			{ out: "a,b,c" },
-		);
+			output: {
+				str: {
+					value: "a,b,c",
+				},
+			},
+		});
 	},
 });
 
 Deno.test({
 	name: "str.repeat",
 	fn: () => {
-		runF(
-			"str.repeat",
-			{
-				input: [
-					{
-						name: "it",
-						mapKey: { id: "0", key: "str" },
-						type: { type: "string" },
-					},
-					{
-						name: "repeatNum",
-						mapKey: { id: "0", key: "repeatNum" },
-						type: { type: "num" },
-					},
-				],
-				output: [
-					{
-						name: "out",
-						mapKey: { id: "0", key: "str" },
-						type: { type: "string" },
-					},
-				],
+		runF("str.repeat", {
+			input: {
+				str: {
+					value: "hello",
+				},
+				repeatNum: {
+					value: 2,
+				},
 			},
-			{ it: "hello", repeatNum: 2 },
-			{ out: "hellohello" },
-		);
+			output: {
+				str: {
+					value: "hellohello",
+				},
+			},
+		});
 	},
 });
