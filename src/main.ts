@@ -964,7 +964,7 @@ function env() {
 								return {
 									name: i.name,
 									mapKey: {
-										id: x[0],
+										id: x,
 										// biome-ignore lint/style/noNonNullAssertion: I am confident that this key exists at last line
 										key: subData[x].next.find((n) => n.toKey === i.name)!
 											.fromKey,
@@ -1231,6 +1231,7 @@ function env() {
 		return m.length ? m : null;
 	}
 
+	// biome-ignore lint/correctness/noConstantCondition: just for test
 	if (true) {
 		// todo only run in test
 		for (const [k, v] of Object.entries(nativeFunctions)) {
