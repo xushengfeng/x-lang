@@ -1,4 +1,4 @@
-export { env, newNativeFunction, type XFunction };
+export { env, newNativeFunction, newFunction, type XFunction };
 
 type XType = (
 	| { type: "string" }
@@ -26,7 +26,7 @@ type XTypeToActual<T extends XType> = T["type"] extends "string"
 				: T["type"] extends "bool"
 					? boolean
 					: T["type"] extends "stop"
-						? never
+						? typeof stopValue
 						: T["type"] extends "nil"
 							? null
 							: T["type"] extends "any"
@@ -80,6 +80,19 @@ type NativeFunction = {
 	) => Record<string, unknown>;
 };
 
+type XFunction = {
+	input: { name: string; mapKey: { id: string; key: string }; type: XType }[];
+	output: { name: string; mapKey: { id: string; key: string }; type: XType }[];
+	data: Record<
+		string,
+		{
+			functionName: string;
+			next: { id: string; fromKey: string; toKey: string }[];
+			defaultValues?: Record<string, unknown>;
+		}
+	>;
+};
+
 function newNativeFunction<
 	x extends string,
 	I extends { name: x; type: XType }[],
@@ -122,20 +135,20 @@ newNativeFunction({
 	},
 });
 
-type XFunction = {
-	input: { name: string; mapKey: { id: string; key: string }; type: XType }[];
-	output: { name: string; mapKey: { id: string; key: string }; type: XType }[];
-	data: Record<
-		string,
-		{
-			functionName: string;
-			next: { id: string; fromKey: string; toKey: string }[];
-			defaultValues?: Record<string, unknown>;
-		}
-	>;
-};
+function newFunction(data: XFunction) {
+	return data;
+}
+
+const stopValue = Symbol("stop");
 
 const nativeFunctions: Record<string, NativeFunction> = {
+	"value.num": newNativeFunction({
+		input: [{ name: "value", type: { type: "num" } }],
+		output: [{ name: "out", type: { type: "num" } }],
+		fun: (args) => {
+			return { out: args.value };
+		},
+	}),
 	"ctrl.if": newNativeFunction({
 		input: [
 			{ name: "condition", type: { type: "bool" } },
@@ -159,6 +172,44 @@ const nativeFunctions: Record<string, NativeFunction> = {
 				return { data: args.true };
 			} else {
 				return { data: args.false };
+			}
+		},
+	}),
+	"ctrl.split": newNativeFunction({
+		input: [
+			{ name: "condition", type: { type: "bool", name: "C" } },
+			{ name: "data", type: { type: "auto", name: "D" } },
+		],
+		output: [
+			{
+				name: "true",
+				type: {
+					type: "or",
+					subType: {
+						left: { type: "auto", name: "D" },
+						right: { type: "stop" },
+					},
+					name: "C",
+				},
+			},
+			{
+				name: "false",
+				type: {
+					type: "or",
+					subType: {
+						left: { type: "stop" },
+						right: { type: "auto", name: "D" },
+					},
+					name: "C",
+				},
+			},
+		],
+		// @ts-expect-error // todo
+		fun: (args) => {
+			if (args.condition) {
+				return { true: args.data, false: stopValue };
+			} else {
+				return { true: stopValue, false: args.data };
 			}
 		},
 	}),
@@ -800,7 +851,10 @@ function env() {
 				}
 				// add next frame
 				for (const next of normalNext ?? []) {
-					// todo stop
+					if (res[next.fromKey] === stopValue) {
+						log.info("stop at", nowFrameId, next.fromKey);
+						continue;
+					}
 					addFrame(frames, next.id, next.toKey, res[next.fromKey]);
 				}
 				// set output
@@ -1017,6 +1071,15 @@ function env() {
 				return;
 			}
 			return x;
+		},
+		addFunction: (name: string, x: XFunction) => {
+			funs[name] = {
+				input: x.input,
+				output: x.output,
+				fun: (args) => {
+					return run(x, args);
+				},
+			};
 		},
 	};
 }
