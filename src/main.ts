@@ -10,6 +10,7 @@ type XType = (
 	| { type: "nil" }
 	| { type: "any" }
 	| { type: "auto" }
+	| { type: "or"; subType: { left: XType; right: XType } }
 ) & { name?: string };
 
 type XTypeToActual<T extends XType> = T["type"] extends "string"
@@ -30,7 +31,12 @@ type XTypeToActual<T extends XType> = T["type"] extends "string"
 							? null
 							: T["type"] extends "any"
 								? unknown
-								: never;
+								: T["type"] extends "or"
+									? // @ts-expect-error
+											| XTypeToActual<T["subType"]["left"]>
+											// @ts-expect-error
+											| XTypeToActual<T["subType"]["right"]>
+									: never;
 
 type InputToArgs<I extends { name: string; type: XType }[]> = {
 	[K in I[number]["name"]]: XTypeToActual<
@@ -129,6 +135,147 @@ type XFunction = {
 };
 
 const nativeFunctions: Record<string, NativeFunction> = {
+	"ctrl.if": newNativeFunction({
+		input: [
+			{ name: "condition", type: { type: "bool" } },
+			{ name: "true", type: { type: "auto", name: "T" } },
+			{ name: "false", type: { type: "auto", name: "F" } },
+		],
+		output: [
+			{
+				name: "data",
+				type: {
+					type: "or",
+					subType: {
+						left: { type: "auto", name: "T" },
+						right: { type: "auto", name: "F" },
+					},
+				},
+			},
+		],
+		fun: (args) => {
+			if (args.condition) {
+				return { data: args.true };
+			} else {
+				return { data: args.false };
+			}
+		},
+	}),
+	"math.add": newNativeFunction({
+		input: [
+			{ name: "a", type: { type: "num" } },
+			{ name: "b", type: { type: "num" } },
+		],
+		output: [{ name: "result", type: { type: "num" } }],
+		fun: (args) => ({
+			result: args.a + args.b,
+		}),
+	}),
+	"math.multiply": newNativeFunction({
+		input: [
+			{ name: "a", type: { type: "num" } },
+			{ name: "b", type: { type: "num" } },
+		],
+		output: [{ name: "result", type: { type: "num" } }],
+		fun: (args) => ({
+			result: args.a * args.b,
+		}),
+	}),
+	"math.subtract": newNativeFunction({
+		input: [
+			{ name: "a", type: { type: "num" } },
+			{ name: "b", type: { type: "num" } },
+		],
+		output: [{ name: "result", type: { type: "num" } }],
+		fun: (args) => ({
+			result: args.a - args.b,
+		}),
+	}),
+	"math.divide": newNativeFunction({
+		input: [
+			{ name: "a", type: { type: "num" } },
+			{ name: "b", type: { type: "num" } },
+		],
+		output: [{ name: "result", type: { type: "num" } }],
+		fun: (args) => ({
+			result: args.a / args.b,
+		}),
+	}),
+	"math.power": newNativeFunction({
+		input: [
+			{ name: "a", type: { type: "num" } },
+			{ name: "b", type: { type: "num" } },
+		],
+		output: [{ name: "result", type: { type: "num" } }],
+		fun: (args) => ({
+			result: args.a ** args.b,
+		}),
+	}),
+	"math.log": newNativeFunction({
+		input: [
+			{ name: "a", type: { type: "num" } },
+			{ name: "b", type: { type: "num" } },
+		],
+		output: [{ name: "result", type: { type: "num" } }],
+		fun: (args) => ({
+			result: Math.log(args.b) / Math.log(args.a),
+		}),
+	}),
+	"math.lg": newNativeFunction({
+		input: [{ name: "a", type: { type: "num" } }],
+		output: [{ name: "result", type: { type: "num" } }],
+		fun: (args) => ({
+			result: Math.log(args.a) / Math.log(10),
+		}),
+	}),
+	"math.log2": newNativeFunction({
+		input: [{ name: "a", type: { type: "num" } }],
+		output: [{ name: "result", type: { type: "num" } }],
+		fun: (args) => ({
+			result: Math.log2(args.a),
+		}),
+	}),
+	"math.ln": newNativeFunction({
+		input: [{ name: "a", type: { type: "num" } }],
+		output: [{ name: "result", type: { type: "num" } }],
+		fun: (args) => ({
+			result: Math.log(args.a),
+		}),
+	}),
+	"math.exp": newNativeFunction({
+		input: [{ name: "a", type: { type: "num" } }],
+		output: [{ name: "result", type: { type: "num" } }],
+		fun: (args) => ({
+			result: Math.exp(args.a),
+		}),
+	}),
+	"math.max": newNativeFunction({
+		input: [
+			{ name: "a", type: { type: "num" } },
+			{ name: "b", type: { type: "num" } },
+		],
+		output: [{ name: "result", type: { type: "num" } }],
+		fun: (args) => ({
+			result: Math.max(args.a, args.b),
+		}),
+	}),
+	"math.min": newNativeFunction({
+		input: [
+			{ name: "a", type: { type: "num" } },
+			{ name: "b", type: { type: "num" } },
+		],
+		output: [{ name: "result", type: { type: "num" } }],
+		fun: (args) => ({
+			result: Math.min(args.a, args.b),
+		}),
+	}),
+	"math.random": newNativeFunction({
+		input: [],
+		output: [{ name: "result", type: { type: "num" } }],
+		fun: () => ({
+			result: Math.random(),
+		}),
+	}),
 	"str.split": newNativeFunction({
 		input: [{ name: "str", type: { type: "string" } }],
 		output: [
@@ -165,6 +312,178 @@ const nativeFunctions: Record<string, NativeFunction> = {
 		output: [{ name: "str", type: { type: "string" } }],
 		fun: (args) => ({
 			str: args.str.repeat(args.repeatNum),
+		}),
+	}),
+	"array.at": newNativeFunction({
+		input: [
+			{
+				name: "arr",
+				type: { type: "array", subType: { item: { type: "auto", name: "I" } } },
+			},
+			{ name: "index", type: { type: "num" } },
+		],
+		output: [
+			{
+				name: "item",
+				type: {
+					type: "or",
+					subType: {
+						left: { type: "auto", name: "I" },
+						right: { type: "nil" },
+					},
+				},
+			},
+		],
+		fun: (args) => ({
+			item: args.arr[args.index] ?? null,
+		}),
+	}),
+	"array.at2": newNativeFunction({
+		input: [
+			{
+				name: "arr",
+				type: { type: "array", subType: { item: { type: "auto", name: "I" } } },
+			},
+			{ name: "index", type: { type: "num" } },
+		],
+		output: [
+			{
+				name: "item",
+				type: {
+					type: "or",
+					subType: {
+						left: { type: "auto", name: "I" },
+						right: { type: "nil" },
+					},
+				},
+			},
+		],
+		fun: (args) => ({
+			item: args.arr.at(args.index) ?? null,
+		}),
+	}),
+	"array.slice": newNativeFunction({
+		input: [
+			{
+				name: "arr",
+				type: { type: "array", subType: { item: { type: "auto", name: "I" } } },
+			},
+			{ name: "from", type: { type: "num" } },
+			{ name: "to", type: { type: "num" } },
+		],
+		output: [
+			{
+				name: "subArray",
+				type: {
+					type: "array",
+					subType: { item: { type: "auto", name: "I" } },
+				},
+			},
+		],
+		fun: (args) => {
+			const from = Math.max(0, args.from);
+			const to = Math.max(0, Math.min(args.arr.length, args.to));
+			return {
+				subArray: args.arr.slice(from, to),
+			};
+		},
+	}),
+	"array.sliceStart": newNativeFunction({
+		input: [
+			{
+				name: "arr",
+				type: { type: "array", subType: { item: { type: "auto", name: "I" } } },
+			},
+			{ name: "len", type: { type: "num" } },
+		],
+		output: [
+			{
+				name: "subArray",
+				type: {
+					type: "array",
+					subType: { item: { type: "auto", name: "I" } },
+				},
+			},
+		],
+		fun: (args) => {
+			return {
+				subArray: args.arr.slice(0, args.len),
+			};
+		},
+	}),
+	"array.sliceEnd": newNativeFunction({
+		input: [
+			{
+				name: "arr",
+				type: { type: "array", subType: { item: { type: "auto", name: "I" } } },
+			},
+			{ name: "len", type: { type: "num" } },
+		],
+		output: [
+			{
+				name: "subArray",
+				type: {
+					type: "array",
+					subType: { item: { type: "auto", name: "I" } },
+				},
+			},
+		],
+		fun: (args) => {
+			return {
+				subArray: args.arr.slice(-args.len),
+			};
+		},
+	}),
+	"array.reverse": newNativeFunction({
+		input: [
+			{
+				name: "arr",
+				type: { type: "array", subType: { item: { type: "auto", name: "I" } } },
+			},
+		],
+		output: [
+			{
+				name: "arr",
+				type: {
+					type: "array",
+					subType: { item: { type: "auto", name: "I" } },
+				},
+			},
+		],
+		fun: (args) => ({
+			arr: args.arr.toReversed(),
+		}),
+	}),
+	"array.sort": newNativeFunction({
+		input: [
+			{
+				name: "arr",
+				type: { type: "array", subType: { item: { type: "auto", name: "I" } } },
+			},
+		],
+		output: [
+			{
+				name: "arr",
+				type: { type: "array", subType: { item: { type: "auto", name: "I" } } },
+			},
+		],
+		cb: {
+			cb: {
+				input: [
+					{
+						name: "itemA",
+						type: { type: "auto", name: "I" },
+					},
+					{
+						name: "itemB",
+						type: { type: "auto", name: "I" },
+					},
+				],
+				output: [{ name: "callback", type: { type: "num" } }],
+			},
+		},
+		fun: (args, cb) => ({
+			arr: args.arr.toSorted((a, b) => cb.cb({ itemA: a, itemB: b }).callback),
 		}),
 	}),
 	"array.map": newNativeFunction({
@@ -371,7 +690,8 @@ function env() {
 
 		for (const i of x.input) {
 			const inputV = input[i.name];
-			if (!inputV) throw new Error(`input ${i.name} not found`);
+			if (!Object.hasOwn(input, i.name))
+				throw new Error(`input ${i.name} not found`);
 			else addFrame(frames, i.mapKey.id, i.mapKey.key, inputV);
 		}
 

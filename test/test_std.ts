@@ -42,6 +42,152 @@ function runF(
 }
 
 Deno.test({
+	name: "ctrl.if",
+	fn: () => {
+		runF("ctrl.if", {
+			input: {
+				condition: {
+					value: true,
+				},
+				true: {
+					value: "a",
+				},
+				false: {
+					value: "b",
+				},
+			},
+			output: {
+				data: {
+					value: "a",
+				},
+			},
+		});
+		runF("ctrl.if", {
+			input: {
+				condition: {
+					value: false,
+				},
+				true: {
+					value: "a",
+				},
+				false: {
+					value: "b",
+				},
+			},
+			output: { data: { value: "b" } },
+		});
+	},
+});
+
+Deno.test({
+	name: "math.add",
+	fn: () => {
+		runF("math.add", {
+			input: { a: { value: 1 }, b: { value: 2 } },
+			output: { result: { value: 3 } },
+		});
+	},
+});
+Deno.test({
+	name: "math.multiply",
+	fn: () => {
+		runF("math.multiply", {
+			input: { a: { value: 3.7 }, b: { value: 42 } },
+			output: { result: { value: 155.4 } },
+		});
+	},
+});
+Deno.test({
+	name: "math.subtract",
+	fn: () => {
+		runF("math.subtract", {
+			input: { a: { value: 1 }, b: { value: 2 } },
+			output: { result: { value: -1 } },
+		});
+	},
+});
+Deno.test({
+	name: "math.divide",
+	fn: () => {
+		runF("math.divide", {
+			input: { a: { value: 1 }, b: { value: 2 } },
+			output: { result: { value: 0.5 } },
+		});
+	},
+});
+Deno.test({
+	name: "math.power",
+	fn: () => {
+		runF("math.power", {
+			input: { a: { value: 2 }, b: { value: 3 } },
+			output: { result: { value: 8 } },
+		});
+	},
+});
+Deno.test({
+	name: "math.log",
+	fn: () => {
+		runF("math.log", {
+			input: { a: { value: 2 }, b: { value: 8 } },
+			output: { result: { value: 3 } },
+		});
+	},
+});
+Deno.test({
+	name: "math.lg",
+	fn: () => {
+		runF("math.lg", {
+			input: { a: { value: 100 } },
+			output: { result: { value: 2 } },
+		});
+	},
+});
+Deno.test({
+	name: "math.log2",
+	fn: () => {
+		runF("math.log2", {
+			input: { a: { value: 8 } },
+			output: { result: { value: 3 } },
+		});
+	},
+});
+Deno.test({
+	name: "math.ln",
+	fn: () => {
+		runF("math.ln", {
+			input: { a: { value: Math.E ** 2 } },
+			output: { result: { value: 2 } },
+		});
+	},
+});
+Deno.test({
+	name: "math.exp",
+	fn: () => {
+		runF("math.exp", {
+			input: { a: { value: 2 } },
+			output: { result: { value: Math.exp(2) } },
+		});
+	},
+});
+Deno.test({
+	name: "math.max",
+	fn: () => {
+		runF("math.max", {
+			input: { a: { value: 9.8 }, b: { value: 9.11 } },
+			output: { result: { value: 9.8 } },
+		});
+	},
+});
+Deno.test({
+	name: "math.min",
+	fn: () => {
+		runF("math.min", {
+			input: { a: { value: 9.8 }, b: { value: 9.11 } },
+			output: { result: { value: 9.11 } },
+		});
+	},
+});
+Deno.test({
 	name: "str.split",
 	fn: () => {
 		runF("str.split", {
@@ -94,6 +240,176 @@ Deno.test({
 				str: {
 					value: "hellohello",
 				},
+			},
+		});
+	},
+});
+
+Deno.test({
+	name: "array.at",
+	fn: () => {
+		runF("array.at", {
+			input: {
+				arr: {
+					value: [0, 1, 2, 3],
+				},
+				index: { value: 1 },
+			},
+			output: {
+				item: { value: 1 },
+			},
+		});
+		runF("array.at", {
+			input: {
+				arr: {
+					value: [0, 1, 2, 3],
+				},
+				index: { value: 10 },
+			},
+			output: {
+				item: { value: null },
+			},
+		});
+		runF("array.at", {
+			input: {
+				arr: {
+					value: [0, 1, 2, 3],
+				},
+				index: { value: -1 },
+			},
+			output: {
+				item: { value: null },
+			},
+		});
+	},
+});
+
+Deno.test({
+	name: "array.at2",
+	fn: () => {
+		runF("array.at2", {
+			input: {
+				arr: {
+					value: [0, 1, 2, 3],
+				},
+				index: { value: 1 },
+			},
+			output: {
+				item: { value: 1 },
+			},
+		});
+		runF("array.at2", {
+			input: {
+				arr: {
+					value: [0, 1, 2, 3],
+				},
+				index: { value: 10 },
+			},
+			output: {
+				item: { value: null },
+			},
+		});
+		runF("array.at2", {
+			input: {
+				arr: {
+					value: [0, 1, 2, 3],
+				},
+				index: { value: -1 },
+			},
+			output: {
+				item: { value: 3 },
+			},
+		});
+	},
+});
+
+Deno.test({
+	name: "array.slice",
+	fn: () => {
+		runF("array.slice", {
+			input: {
+				arr: {
+					value: [0, 1, 2, 3],
+				},
+				from: { value: 1 },
+				to: { value: 2 },
+			},
+			output: {
+				subArray: { value: [0, 1, 2, 3].slice(1, 2) },
+			},
+		});
+		runF("array.slice", {
+			input: {
+				arr: {
+					value: [0, 1, 2, 3],
+				},
+				from: { value: 1 },
+				to: { value: -0 },
+			},
+			output: {
+				subArray: { value: [0, 1, 2, 3].slice(1, -0) },
+			},
+		});
+		runF("array.slice", {
+			input: {
+				arr: {
+					value: [0, 1, 2, 3],
+				},
+				from: { value: 1 },
+				to: { value: -1 },
+			},
+			output: {
+				subArray: { value: [] },
+			},
+		});
+	},
+});
+
+Deno.test({
+	name: "array.sliceStart",
+	fn: () => {
+		runF("array.sliceStart", {
+			input: {
+				arr: {
+					value: [0, 1, 2, 3],
+				},
+				len: { value: 2 },
+			},
+			output: {
+				subArray: { value: [0, 1] },
+			},
+		});
+	},
+});
+
+Deno.test({
+	name: "array.sliceEnd",
+	fn: () => {
+		runF("array.sliceEnd", {
+			input: {
+				arr: {
+					value: [0, 1, 2, 3],
+				},
+				len: { value: 2 },
+			},
+			output: {
+				subArray: { value: [2, 3] },
+			},
+		});
+	},
+});
+
+Deno.test({
+	name: "array.reverse",
+	fn: () => {
+		runF("array.reverse", {
+			input: {
+				arr: {
+					value: [0, 1, 2, 3],
+				},
+			},
+			output: {
+				arr: { value: [3, 2, 1, 0] },
 			},
 		});
 	},
