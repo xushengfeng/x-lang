@@ -739,7 +739,7 @@ function env() {
 	function run0(x: XFunction, frames: Map<string, Map<string, unknown>>) {
 		const outputs: Record<string, unknown> = {};
 
-		let maxRun = 1000;
+		let maxRun = Object.keys(x.data).length + 10;
 
 		while (true) {
 			const nowFrameKey = frames.keys().next();
@@ -747,7 +747,7 @@ function env() {
 
 			maxRun--;
 			if (maxRun <= 0) {
-				log.error("max run exceeded");
+				log.error(`max run exceeded`, frames, x);
 				break;
 			}
 
@@ -861,6 +861,9 @@ function env() {
 				const o = x.output.find((i) => i.mapKey.id === nowFrameId);
 				if (o) {
 					outputs[o.name] = res[o.mapKey.key];
+					if (Object.keys(outputs).length === x.output.length) {
+						break;
+					}
 				}
 			}
 
