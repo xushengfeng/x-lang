@@ -1,4 +1,10 @@
-export { env, newNativeFunction, newFunction, type XFunction };
+export {
+	env,
+	newNativeFunction,
+	newFunction,
+	type XFunction,
+	type NativeFunction,
+};
 
 type XType = (
 	| { type: "string" }
@@ -1243,6 +1249,7 @@ function env() {
 	}
 
 	return {
+		getFunctions: () => funs,
 		run,
 		checkStrict: (x: XFunction) => {
 			const r = check(x);
