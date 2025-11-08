@@ -133,7 +133,7 @@ class functionBlock {
 		if (!el || !root) return null;
 		const r = el.el.getBoundingClientRect();
 		const lr = root.getBoundingClientRect();
-		const x = kind === "out" ? r.right - lr.left : r.left - lr.left;
+		const x = kind === "out" ? r.right - lr.left + 4 : r.left - lr.left - 4;
 		const y = r.top - lr.top + r.height / 2;
 		return { x, y };
 	}
@@ -143,7 +143,10 @@ class functionBlock {
 		to: { x: number; y: number },
 	) {
 		const dx = Math.abs(to.x - from.x);
-		const c = Math.max(40, dx * 0.4);
+		let c = Math.max(40, dx * 0.4);
+		if (from.x + c > to.x - c) {
+			c = Math.abs(from.x - (from.x + to.x) / 2);
+		}
 		const d = `M ${from.x} ${from.y} C ${from.x + c} ${from.y}, ${to.x - c} ${to.y}, ${to.x} ${to.y}`;
 		pathEl.setAttribute("d", d);
 	}
