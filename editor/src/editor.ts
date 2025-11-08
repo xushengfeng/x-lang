@@ -1,4 +1,4 @@
-import { initDKH, trackPoint, txt, view, type ElType } from "dkh-ui";
+import { button, initDKH, trackPoint, txt, view, type ElType } from "dkh-ui";
 import { env, type NativeFunction, type XFunction } from "../../src/main";
 
 import { fibCode } from "../../test/test_data";
@@ -23,6 +23,8 @@ type FileData = {
 };
 
 const functionMap = new Map<string, NativeFunction>();
+
+let fileData: FileData | undefined;
 
 const thisViewBlock = new Map<string, functionBlock>();
 
@@ -51,6 +53,7 @@ class functionBlock {
 		path: SVGPathElement;
 	}[] = [];
 	private linker: ElType<HTMLElement>;
+	private events: { blockMoveEnd: () => void } = { blockMoveEnd: () => {} };
 	constructor(op: { functionName: string; linker: ElType<HTMLElement> }) {
 		const fun = functionMap.get(op.functionName);
 		if (!fun) throw new Error(`Function ${op.functionName} not found`);
@@ -90,7 +93,13 @@ class functionBlock {
 				this.setPosi(p.x, p.y);
 				this.redrawLinkedPaths();
 			},
+			end: () => {
+				this.emit("blockMoveEnd");
+			},
 		});
+	}
+	private emit(key: keyof typeof this.events) {
+		this.events[key]();
 	}
 	setPosi(x: number, y: number) {
 		const myRect = this.getRect({ dx: 4, dy: 4 });
@@ -146,6 +155,7 @@ class functionBlock {
 			left: `${x}px`,
 		});
 		this.posi = { x, y };
+		return this.posi;
 	}
 	getRect(padding = { dx: 0, dy: 0 }) {
 		const rect = this.el.el.getBoundingClientRect();
@@ -246,16 +256,40 @@ class functionBlock {
 			this.redrawPath(l.path, l.from, l.fromKey, this, l.toKey);
 		}
 	}
+
+	on<K extends keyof typeof this.events>(
+		event: K,
+		cb: (typeof this.events)[K],
+	) {
+		this.events[event] = cb;
+	}
 }
 
-function renderFile(file: FileData) {
+function renderFile(rawfile: FileData) {
+	const file = structuredClone(rawfile);
 	const xlangEnv = env();
+
+	const vp = { x: 0, y: 0 };
 
 	baseEditor.clear();
 	const pageSelect = view();
-	const viewer = view().style({ flexGrow: 1, position: "relative" });
-	baseEditor.add([pageSelect, viewer]);
+	const xWarp = view("x").style({ flexGrow: 1 });
+	const viewer = view("x")
+		.style({ flexGrow: 1, position: "relative", overflow: "hidden" })
+		.addInto(xWarp);
+	baseEditor.add([pageSelect, xWarp]);
 	const baseEditorRoot = view().style({ position: "absolute" }).addInto(viewer);
+	const ioSetter = view().style({ width: "200px" }).addInto(xWarp);
+
+	viewer.on("wheel", (e) => {
+		e.preventDefault();
+		vp.x -= e.deltaX;
+		vp.y -= e.deltaY;
+		baseEditorRoot.style({
+			left: `${vp.x}px`,
+			top: `${vp.y}px`,
+		});
+	});
 
 	for (const [pageId, page] of Object.entries(file.data)) {
 		if (pageId === "main") continue;
@@ -287,7 +321,9 @@ function renderFile(file: FileData) {
 				const svg = functionBlock.ensureSvg(linker);
 				if (svg) svg.innerHTML = "";
 				thisViewBlock.clear();
-				for (const [blockId, data] of Object.entries(page.code.data)) {
+
+				function addBlock(blockId: string) {
+					const data = page.code.data[blockId];
 					const fb = new functionBlock({
 						functionName: data.functionName,
 						linker,
@@ -297,8 +333,14 @@ function renderFile(file: FileData) {
 					thisViewBlock.set(blockId, fb);
 					const geo = page.geo[blockId];
 					if (geo) fb.setPosi(geo.x, geo.y);
+
+					fb.on("blockMoveEnd", () => {
+						page.geo[blockId] = { x: fb.posi.x, y: fb.posi.y };
+						fileData = structuredClone(file);
+					});
 				}
-				for (const [fromId, fromData] of Object.entries(page.code.data)) {
+				function linkBlock(fromId: string) {
+					const fromData = page.code.data[fromId];
 					for (const n of fromData.next) {
 						const fromBlock = thisViewBlock.get(fromId);
 						const toBlock = thisViewBlock.get(n.id);
@@ -306,6 +348,54 @@ function renderFile(file: FileData) {
 							fromBlock.linkTo(toBlock, n.fromKey, n.toKey);
 					}
 				}
+
+				for (const blockId of Object.keys(page.code.data)) {
+					addBlock(blockId);
+				}
+				for (const fromId of Object.keys(page.code.data)) {
+					linkBlock(fromId);
+				}
+
+				viewer.el.oncontextmenu = (e) => {
+					e.preventDefault();
+					const x = e.clientX;
+					const y = e.clientY;
+					const menu = view()
+						.style({
+							position: "fixed",
+							top: `${y}px`,
+							left: `${x}px`,
+							backgroundColor: "white",
+							border: "1px solid black",
+							maxHeight: "200px",
+							overflow: "auto",
+							padding: "4px",
+							zIndex: 1000,
+						})
+						.addInto(baseEditor);
+					const funs = functionMap;
+					menu.add(
+						Array.from(funs.entries()).map(([name, f]) =>
+							view()
+								.add(txt(name))
+								.on("click", () => {
+									menu.remove();
+									const id = crypto.randomUUID().slice(0, 8);
+									page.code.data[id] = {
+										functionName: name,
+										next: [],
+									};
+									const rootRect = baseEditorRoot.el.getBoundingClientRect();
+									page.geo[id] = {
+										x: x - rootRect.x,
+										y: y - rootRect.y,
+									};
+									fileData = structuredClone(file);
+									addBlock(id);
+								}),
+						),
+					);
+				};
 			}),
 		);
 	}
@@ -321,44 +411,17 @@ const mainDiv = view("y")
 	.addInto();
 
 const toolsBar = view().addInto(mainDiv);
+
+button("导出")
+	.on("click", () => {
+		console.log(fileData);
+	})
+	.addInto(toolsBar);
+
 const viewer = view().style({ flexGrow: 1 }).addInto(mainDiv);
 
-const baseEditor = view()
+const baseEditor = view("y")
 	.style({ width: "100%", height: "100%" })
-	.on("contextmenu", (e) => {
-		e.preventDefault();
-		let baseX = 0;
-		let baseY = 0;
-		const x = e.clientX - baseX;
-		const y = e.clientY - baseY;
-		const menu = view()
-			.style({
-				position: "absolute",
-				top: `${y}px`,
-				left: `${x}px`,
-				backgroundColor: "white",
-				border: "1px solid black",
-				maxHeight: "200px",
-				overflow: "auto",
-				padding: "4px",
-				zIndex: 1000,
-			})
-			.addInto(baseEditor);
-		const funs = functionMap;
-		menu.add(
-			Object.entries(funs).map(([name, f]) =>
-				view()
-					.add(txt(name))
-					.on("click", () => {
-						menu.remove();
-						console.log(name, f);
-						// const fb = new functionBlock(name);
-						// fb.el.addInto(baseEditor);
-						// todo
-					}),
-			),
-		);
-	})
 	.addInto(viewer);
 
 // for test
@@ -378,17 +441,17 @@ renderFile({
 			code: fibCode,
 			geo: {
 				0: { x: 35, y: 150 },
-				constLess1: { x: 200, y: 125 },
-				less: { x: 348, y: 155 },
+				constLess1: { x: 116, y: 274 },
+				less: { x: 293, y: 84 },
 				splitX: { x: 500, y: 159 },
-				constSub1: { x: 611, y: 125 },
-				constSub2: { x: 611, y: 313 },
-				sub1: { x: 758, y: 130 },
+				constSub1: { x: 522, y: 55 },
+				constSub2: { x: 470, y: 327 },
+				sub1: { x: 756, y: 97 },
 				sub2: { x: 758, y: 323 },
 				fib1: { x: 933, y: 135 },
 				fib2: { x: 933, y: 335 },
-				add: { x: 1024, y: 245 },
-				out: { x: 1247, y: 221 },
+				add: { x: 1175, y: 260 },
+				out: { x: 1430, y: 212 },
 			},
 		},
 	},
