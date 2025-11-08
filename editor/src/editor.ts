@@ -93,11 +93,70 @@ class functionBlock {
 		});
 	}
 	setPosi(x: number, y: number) {
+		const myRect = this.getRect({ dx: 4, dy: 4 });
+		const otherRect = Array.from(thisViewBlock.values())
+			.filter((i) => i !== this)
+			.map((b) => b.getRect({ dx: 4, dy: 4 }));
+
+		const dx = myRect.width / 2;
+		const dy = myRect.height / 2;
+
+		const cx = x + dx;
+		const cy = y + dy;
+
+		const xs = otherRect
+			.map((r) => r.left - dx)
+			.concat(otherRect.map((r) => r.right + dx))
+			.concat([cx]);
+		const ys = otherRect
+			.map((r) => r.top - dy)
+			.concat(otherRect.map((r) => r.bottom + dy))
+			.concat([cy]);
+
+		const points = xs
+			.flatMap((px) =>
+				ys.map((py) => ({ x: px, y: py, rq: (px - cx) ** 2 + (py - cy) ** 2 })),
+			)
+			.sort((a, b) => a.rq - b.rq);
+
+		for (const p of points) {
+			const thisRect = {
+				left: p.x - dx,
+				right: p.x + dx,
+				top: p.y - dy,
+				bottom: p.y + dy,
+			};
+			const overlap = otherRect.some((r) => {
+				return (
+					Math.max(thisRect.right, r.right) - Math.min(thisRect.left, r.left) <
+						thisRect.right - thisRect.left + r.width &&
+					Math.max(thisRect.bottom, r.bottom) - Math.min(thisRect.top, r.top) <
+						thisRect.bottom - thisRect.top + r.height
+				);
+			});
+			if (overlap) continue;
+			else 1;
+			x = p.x - dx;
+			y = p.y - dy;
+			break;
+		}
+
 		this.el.style({
 			top: `${y}px`,
 			left: `${x}px`,
 		});
 		this.posi = { x, y };
+	}
+	getRect(padding = { dx: 0, dy: 0 }) {
+		const rect = this.el.el.getBoundingClientRect();
+		return {
+			left: this.posi.x - padding.dx,
+			top: this.posi.y - padding.dy,
+			right: this.posi.x + rect.width + padding.dx,
+			bottom: this.posi.y + rect.height + padding.dy,
+			width: rect.width + padding.dx * 2,
+			height: rect.height + padding.dy * 2,
+		};
 	}
 	getSlots() {
 		return this.slots;
