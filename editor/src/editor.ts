@@ -669,8 +669,21 @@ function renderMagic(rawfile: FileData) {
 			const a1 = norm(fromPolar.a);
 			const a2 = norm(toPolar.a);
 
-			// 强制短弧（largeArcFlag = 0），顺时针：sweepFlag = 0
-			const largeArcFlag = 0;
+			// 计算从 a1 到 a2 的顺时针角度增量（0..2PI)
+			function to360(v: number) {
+				let t = v;
+				while (t < 0) t += 2 * Math.PI;
+				while (t >= 2 * Math.PI) t -= 2 * Math.PI;
+				return t;
+			}
+			const a1_360 = to360(a1);
+			const a2_360 = to360(a2);
+			// 顺时针方向角度差（从 a1 到 a2 顺时针走过的角度）
+			let deltaCW = a1_360 - a2_360;
+			if (deltaCW < 0) deltaCW += 2 * Math.PI;
+
+			// largeArcFlag 根据顺时针角度是否大于 PI 自动决定；sweepFlag=1 保持顺时针绘制
+			const largeArcFlag = deltaCW > Math.PI ? 1 : 0;
 			const sweepFlag = 1;
 
 			// 检查与已绘制弧的重叠（在相同或接近半径时）并计算偏移
@@ -678,20 +691,17 @@ function renderMagic(rawfile: FileData) {
 			let overlapCount = 0;
 			for (const ex of existingArcs) {
 				if (Math.abs(ex.r - r) > 1) continue;
-				let s1 = a1;
-				let e1 = a2;
-				let d = e1 - s1;
-				while (d <= -Math.PI) d += 2 * Math.PI;
-				while (d > Math.PI) d -= 2 * Math.PI;
-				if (d < 0) [s1, e1] = [e1, s1];
-
-				let s2 = norm(ex.a1);
-				let e2 = norm(ex.a2);
-				let d2 = e2 - s2;
-				while (d2 <= -Math.PI) d2 += 2 * Math.PI;
-				while (d2 > Math.PI) d2 -= 2 * Math.PI;
-				if (d2 < 0) [s2, e2] = [e2, s2];
-
+				const exA1 = to360(ex.a1);
+				const exA2 = to360(ex.a2);
+				// 当前弧的 CW 覆盖区间用 [s1,e1] 表示（在 0..4PI 范围内确保 e1>=s1）
+				const s1 = a2_360;
+				let e1 = a1_360;
+				if (e1 < s1) e1 += 2 * Math.PI;
+				// 已有弧的 CW 覆盖区间
+				const s2 = exA2;
+				let e2 = exA1;
+				if (e2 < s2) e2 += 2 * Math.PI;
+				// 若区间在展开空间有交集则认为重叠
 				const inter = !(e1 < s2 || e2 < s1);
 				if (inter) overlapCount++;
 			}
