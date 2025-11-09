@@ -898,13 +898,16 @@ function findHeads(data: XFunction["data"]) {
 
 function env(op?: {
 	log?: {
-		log: (...args: unknown[]) => void;
-		error: (...args: unknown[]) => void;
-		warn: (...args: unknown[]) => void;
-		info: (...args: unknown[]) => void;
-		debug: (...args: unknown[]) => void;
+		log?: (...args: unknown[]) => void;
+		error?: (...args: unknown[]) => void;
+		warn?: (...args: unknown[]) => void;
+		info?: (...args: unknown[]) => void;
+		debug?: (...args: unknown[]) => void;
 	};
 	runInfo?: (fName: string, frameId: string) => void;
+	cache?: {
+		max?: number;
+	};
 }) {
 	const funs = nativeFunctions;
 
@@ -916,6 +919,8 @@ function env(op?: {
 		debug: console.debug,
 		...op?.log,
 	};
+
+	const cache = new Map<string, Record<string, unknown>>();
 
 	function run0(
 		x: XFunction,
@@ -1032,7 +1037,22 @@ function env(op?: {
 				);
 				op?.runInfo?.(fName, nowFrameId);
 
-				const res = f.fun(args, cb);
+				let res: Record<string, unknown> | undefined;
+				let key: string | undefined;
+				if (op?.cache) {
+					key = `${nowX.functionName}::${JSON.stringify(args)}`;
+					res = cache.get(key);
+				}
+				if (!res) res = f.fun(args, cb);
+				if (op?.cache?.max) {
+					if (key) {
+						cache.set(key, res);
+						if (cache.size > op.cache.max) {
+							const firstKey = Array.from(cache.keys())[0];
+							if (firstKey) cache.delete(firstKey);
+						}
+					}
+				}
 				for (const i of Object.keys(subData)) {
 					frames.delete(i);
 				}
@@ -1266,7 +1286,12 @@ function env(op?: {
 
 	return {
 		getFunctions: () => funs,
-		run,
+		// @ts-expect-error
+		run: (...args) => {
+			cache.clear();
+			// @ts-expect-error
+			return run(...args);
+		},
 		checkStrict: (x: XFunction) => {
 			const r = check(x);
 			if (r) {

@@ -431,6 +431,9 @@ function renderMagic(rawfile: FileData) {
 			console.log(fName, frameId);
 			runInfo.add({ fName, frameId });
 		},
+		cache: {
+			max: 1000,
+		},
 	});
 
 	for (const [pageId, page] of Object.entries(file.data)) {

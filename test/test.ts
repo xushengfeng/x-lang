@@ -238,3 +238,55 @@ Deno.test({
 		}
 	},
 });
+
+Deno.test({
+	name: "cache fib",
+	fn: () => {
+		const e = env({
+			cache: {
+				max: 10000,
+			},
+			log: { debug: () => {}, warn: () => {}, error: () => {}, info: () => {} },
+		});
+		const fib = newFunction(fibCode);
+		e.addFunction("fib", fib);
+		e.checkStrict(fib);
+		const x = e.checkStrict({
+			input: [
+				{
+					name: "it",
+					mapKey: { id: "0", key: "num" },
+					type: { type: "num" },
+				},
+			],
+			output: [
+				{
+					name: "out",
+					mapKey: { id: "0", key: "num" },
+					type: { type: "num" },
+				},
+			],
+			data: {
+				"0": {
+					functionName: "fib",
+					next: [],
+				},
+			},
+		});
+		const cachedResults = new Map<number, number>();
+		function fibf(n: number): number {
+			if (n <= 1) return n;
+			if (cachedResults.has(n)) {
+				return cachedResults.get(n)!;
+			}
+			const r = fibf(n - 1) + fibf(n - 2);
+			cachedResults.set(n, r);
+			return r;
+		}
+		if (x) {
+			const r = e.run(x, { it: 30 });
+			console.log(r);
+			assertEquals(r, { out: fibf(30) });
+		}
+	},
+});
