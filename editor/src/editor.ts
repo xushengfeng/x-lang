@@ -425,6 +425,7 @@ function renderEditor(rawfile: FileData) {
 function renderMagic(rawfile: FileData) {
 	const file = structuredClone(rawfile);
 	const runInfo = new Set<{ fName: string; frameId: string }>();
+	let cancelRun = false;
 	const xlangEnv = env({
 		runInfo: (fName, frameId) => {
 			console.log(fName, frameId);
@@ -541,6 +542,7 @@ function renderMagic(rawfile: FileData) {
 	button("运行")
 		.addInto(sideBar)
 		.on("click", async () => {
+			cancelRun = false;
 			const code = inputArea.gv;
 			const x = JSON.parse(code);
 
@@ -569,7 +571,9 @@ function renderMagic(rawfile: FileData) {
 
 			const t = 40;
 			const t2 = 100;
+			let runCount = 0;
 			for (const info of runInfo) {
+				if (cancelRun) break;
 				const gArr = glyphMap.get(`${info.fName}-${info.frameId}`) ?? {
 					els: [],
 					noHlTimer: 0,
@@ -590,6 +594,10 @@ function renderMagic(rawfile: FileData) {
 					g.classList.remove(magicWillHighLightClass);
 					await sleep(t);
 				}
+				runCount++;
+				animateRunProgress.sv(
+					`${((runCount / runInfo.size) * 100).toFixed(2)}%`,
+				);
 				await sleep(t2);
 			}
 			await sleep(t * 6);
@@ -613,10 +621,13 @@ function renderMagic(rawfile: FileData) {
 				}
 			}
 		});
-	const outputArea = textarea()
-		.style({ flexGrow: 1 })
-		.addInto(sideBar)
-		.attr({ readOnly: true });
+	const outputArea = textarea().addInto(sideBar).attr({ readOnly: true });
+	const animateRunProgress = txt().addInto(view("x").addInto(sideBar));
+	button("取消魔法进行")
+		.on("click", () => {
+			cancelRun = true;
+		})
+		.addInto(sideBar);
 
 	const pages = Object.entries(file.data);
 	if (pages.length === 0) return;
