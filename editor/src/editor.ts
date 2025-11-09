@@ -1,5 +1,6 @@
 import {
 	addClass,
+	addStyle,
 	button,
 	initDKH,
 	textarea,
@@ -515,7 +516,9 @@ function renderMagic(rawfile: FileData) {
 
 	baseEditor.clear();
 
-	const viewer = view("x").addInto(baseEditor);
+	const viewer = view("x")
+		.style({ backgroundColor: "#000", color: "#fff" })
+		.addInto(baseEditor);
 
 	const hexGridSize = 400;
 	const size = hexGridSize * 2 + hexGridSize;
@@ -527,6 +530,7 @@ function renderMagic(rawfile: FileData) {
 	svg.setAttribute("width", String(size));
 	svg.setAttribute("height", String(2048));
 	svg.style.display = "block";
+	svg.style.backgroundColor = "#000";
 	viewer.clear();
 	viewer.el.appendChild(svg);
 
@@ -551,41 +555,61 @@ function renderMagic(rawfile: FileData) {
 			}
 
 			for (const gArr of glyphMap.values()) {
-				for (const g of gArr.els) g.classList.add(magicWillHighLightClass);
+				for (const g of gArr.els) {
+					g.classList.add(magicWillHighLightClass);
+					g.classList.add(magicHighLightBaseClass);
+				}
 			}
-			const t = 120;
+
+			function clearHighLight(classList: DOMTokenList) {
+				classList.remove(magicHighLight1Class);
+				classList.remove(magicHighLight2Class);
+				classList.remove(magicHighLight3Class);
+			}
+
+			const t = 40;
+			const t2 = 100;
 			for (const info of runInfo) {
 				const gArr = glyphMap.get(`${info.fName}-${info.frameId}`) ?? {
 					els: [],
 					noHlTimer: 0,
 				};
 				for (const g of gArr.els) {
-					g.classList.add(magicHighLightClass);
-					g.classList.remove(magicWillHighLightClass);
-					g.classList.remove(magicHadRunClass);
-				}
-				await sleep(t);
-				clearTimeout(gArr.noHlTimer);
-				gArr.noHlTimer = setTimeout(() => {
-					for (const g of gArr.els) {
-						g.classList.remove(magicHighLightClass);
-						g.classList.add(magicHadRunClass);
+					if (g.classList.contains(magicWillHighLightClass)) {
+						g.classList.add(magicHighLight1Class);
+					} else if (g.classList.contains(magicHighLight1Class)) {
+						clearHighLight(g.classList);
+						g.classList.add(magicHighLight2Class);
+					} else if (g.classList.contains(magicHighLight2Class)) {
+						clearHighLight(g.classList);
+						g.classList.add(magicHighLight3Class);
+					} else if (g.classList.contains(magicHighLight3Class)) {
+						clearHighLight(g.classList);
+						g.classList.add(magicHighLight1Class);
 					}
-				}, t * 6);
+					g.classList.remove(magicWillHighLightClass);
+					await sleep(t);
+				}
+				await sleep(t2);
 			}
 			await sleep(t * 6);
 
 			for (const gArr of glyphMap.values()) {
 				for (const g of gArr.els) {
+					clearHighLight(g.classList);
+
+					if (g.classList.contains(magicWillHighLightClass)) {
+						await sleep(t);
+					}
+					g.classList.add(magicHighLight1Class);
 					g.classList.remove(magicWillHighLightClass);
-					g.classList.remove(magicHadRunClass);
-					g.classList.add(magicHighLightClass);
 				}
 			}
 			await sleep(2000);
 			for (const gArr of glyphMap.values()) {
 				for (const g of gArr.els) {
-					g.classList.remove(magicHighLightClass);
+					g.classList.remove(magicHighLightBaseClass);
+					clearHighLight(g.classList);
 				}
 			}
 		});
@@ -613,6 +637,8 @@ function renderMagic(rawfile: FileData) {
 		}
 		centers.push({ x: cx, y: cy });
 	}
+
+	const mainColor = "#fff";
 
 	/**
 	 *
@@ -672,7 +698,7 @@ function renderMagic(rawfile: FileData) {
 				circle.setAttribute("cx", String(gx));
 				circle.setAttribute("cy", String(gy));
 				circle.setAttribute("r", "2");
-				circle.setAttribute("fill", "#111");
+				circle.setAttribute("fill", mainColor);
 				g.appendChild(circle);
 				continue;
 			}
@@ -686,7 +712,7 @@ function renderMagic(rawfile: FileData) {
 			}
 			path.setAttribute("d", dParts.join(" "));
 			path.setAttribute("fill", "none");
-			path.setAttribute("stroke", "#111");
+			path.setAttribute("stroke", mainColor);
 			path.setAttribute("stroke-width", "4");
 			path.setAttribute("stroke-linecap", "round");
 			path.setAttribute("stroke-linejoin", "round");
@@ -943,7 +969,7 @@ function renderMagic(rawfile: FileData) {
 				const toPolar = { r: iItem.r - 8, a: iItem.a };
 				const path = document.createElementNS(svgNS, "path");
 				path.setAttribute("fill", "none");
-				path.setAttribute("stroke", "#111");
+				path.setAttribute("stroke", mainColor);
 				path.setAttribute("stroke-width", "2");
 				drawLinkPolar(path, fromPolar, toPolar, cx, cy, existingArcs);
 				linkGroup.appendChild(path);
@@ -957,7 +983,7 @@ function renderMagic(rawfile: FileData) {
 			circle.setAttribute("cy", String(cy));
 			circle.setAttribute("r", String(outerCircle.r + outerCircle.h + 8));
 			circle.setAttribute("fill", "none");
-			circle.setAttribute("stroke", "#111");
+			circle.setAttribute("stroke", mainColor);
 			circle.setAttribute("stroke-width", "4");
 			svg.appendChild(circle);
 		}
@@ -987,13 +1013,48 @@ const baseEditor = view("y")
 	.style({ width: "100%", height: "100%" })
 	.addInto(viewer);
 
-const magicHighLightClass = addClass(
+addStyle({
+	textarea: {
+		backgroundColor: "transparent",
+	},
+});
+
+const magicHighLightBaseClass = addClass(
 	{},
 	{
 		"& > *": {
-			stroke: "#8a2be2",
-			filter: `drop-shadow(0 0 4px #8a2be2)`,
+			filter: `drop-shadow(0 0 4px #be78ffff)`,
 			transition: "0.1s",
+		},
+		"& > path": {
+			stroke: "var(--c)",
+		},
+		"& > circle": {
+			fill: "var(--c)",
+		},
+	},
+);
+const magicHighLight1Class = addClass(
+	{},
+	{
+		"& > *": {
+			"--c": "oklch(64.44% 0.27 300deg)",
+		},
+	},
+);
+const magicHighLight2Class = addClass(
+	{},
+	{
+		"& > *": {
+			"--c": "oklch(64.44% 0.27 270deg)",
+		},
+	},
+);
+const magicHighLight3Class = addClass(
+	{},
+	{
+		"& > *": {
+			"--c": "oklch(64.44% 0.27 330deg)",
 		},
 	},
 );
@@ -1001,23 +1062,11 @@ const magicHighLightClass = addClass(
 const magicWillHighLightClass = addClass(
 	{},
 	{
-		"& > *": {
-			stroke: "#0001",
+		"& > path": {
+			stroke: "#fff5",
 		},
 		"& > circle": {
-			fill: "#0001",
-		},
-	},
-);
-
-const magicHadRunClass = addClass(
-	{},
-	{
-		"& > *": {
-			stroke: "#8a2be220",
-		},
-		"& > circle": {
-			fill: "#8a2be220",
+			fill: "#fff5",
 		},
 	},
 );
