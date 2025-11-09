@@ -896,7 +896,16 @@ function findHeads(data: XFunction["data"]) {
 	return { heads };
 }
 
-function env() {
+function env(op?: {
+	log?: {
+		log: (...args: unknown[]) => void;
+		error: (...args: unknown[]) => void;
+		warn: (...args: unknown[]) => void;
+		info: (...args: unknown[]) => void;
+		debug: (...args: unknown[]) => void;
+	};
+	runInfo?: (fName: string, frameId: string) => void;
+}) {
 	const funs = nativeFunctions;
 
 	const log = {
@@ -905,9 +914,14 @@ function env() {
 		warn: console.warn,
 		info: console.info,
 		debug: console.debug,
+		...op?.log,
 	};
 
-	function run0(x: XFunction, frames: Map<string, Map<string, unknown>>) {
+	function run0(
+		x: XFunction,
+		frames: Map<string, Map<string, unknown>>,
+		fName = "main",
+	) {
 		const outputs: Record<string, unknown> = {};
 
 		let maxRun = Object.keys(x.data).length + 10;
@@ -1003,7 +1017,7 @@ function env() {
 									if (!inputV) throw new Error(`input ${i.name} not found`);
 									else addFrame(subFrames, i.mapKey.id, i.mapKey.key, inputV);
 								}
-								return run0(rundata, subFrames);
+								return run0(rundata, subFrames, fName);
 							},
 						];
 					}),
@@ -1016,6 +1030,8 @@ function env() {
 						nowFrame.get(i.name) ?? nowX.defaultValues?.[i.name],
 					]),
 				);
+				op?.runInfo?.(fName, nowFrameId);
+
 				const res = f.fun(args, cb);
 				for (const i of Object.keys(subData)) {
 					frames.delete(i);
@@ -1057,7 +1073,7 @@ function env() {
 		frames.set(id, f);
 	}
 
-	function run(x: XFunction, input: Record<string, unknown>) {
+	function run(x: XFunction, input: Record<string, unknown>, fName = "main") {
 		const frames = new Map<string, Map<string, unknown>>();
 
 		for (const i of x.input) {
@@ -1072,7 +1088,7 @@ function env() {
 			if (!frames.has(id)) frames.set(id, new Map());
 		}
 
-		return run0(x, frames);
+		return run0(x, frames, fName);
 	}
 
 	function check(x: XFunction) {
@@ -1264,7 +1280,7 @@ function env() {
 				input: x.input,
 				output: x.output,
 				fun: (args) => {
-					return run(x, args);
+					return run(x, args, name);
 				},
 			};
 		},
