@@ -1,4 +1,13 @@
-import { button, initDKH, trackPoint, txt, view, type ElType } from "dkh-ui";
+import {
+	addClass,
+	button,
+	initDKH,
+	textarea,
+	trackPoint,
+	txt,
+	view,
+	type ElType,
+} from "dkh-ui";
 import { env, type NativeFunction, type XFunction } from "../../src/main";
 
 import { fibCode } from "../../test/test_data";
@@ -414,7 +423,13 @@ function renderEditor(rawfile: FileData) {
 
 function renderMagic(rawfile: FileData) {
 	const file = structuredClone(rawfile);
-	const xlangEnv = env();
+	const runInfo = new Set<{ fName: string; frameId: string }>();
+	const xlangEnv = env({
+		runInfo: (fName, frameId) => {
+			console.log(fName, frameId);
+			runInfo.add({ fName, frameId });
+		},
+	});
 
 	for (const [pageId, page] of Object.entries(file.data)) {
 		if (pageId === "main") continue;
@@ -515,6 +530,70 @@ function renderMagic(rawfile: FileData) {
 	viewer.clear();
 	viewer.el.appendChild(svg);
 
+	const glyphMap = new Map<string, { els: SVGGElement[]; noHlTimer: number }>();
+
+	const sideBar = view("y").addInto(viewer);
+	const inputArea = textarea().addInto(sideBar);
+	button("运行")
+		.addInto(sideBar)
+		.on("click", async () => {
+			const code = inputArea.gv;
+			const x = JSON.parse(code);
+
+			runInfo.clear();
+
+			const r = xlangEnv.run(file.data.main.code, x);
+
+			outputArea.sv(JSON.stringify(r, null, 2));
+
+			async function sleep(T: number) {
+				return new Promise((resolve) => setTimeout(resolve, T));
+			}
+
+			for (const gArr of glyphMap.values()) {
+				for (const g of gArr.els) g.classList.add(magicWillHighLightClass);
+			}
+			const t = 120;
+			for (const info of runInfo) {
+				const gArr = glyphMap.get(`${info.fName}-${info.frameId}`) ?? {
+					els: [],
+					noHlTimer: 0,
+				};
+				for (const g of gArr.els) {
+					g.classList.add(magicHighLightClass);
+					g.classList.remove(magicWillHighLightClass);
+					g.classList.remove(magicHadRunClass);
+				}
+				await sleep(t);
+				clearTimeout(gArr.noHlTimer);
+				gArr.noHlTimer = setTimeout(() => {
+					for (const g of gArr.els) {
+						g.classList.remove(magicHighLightClass);
+						g.classList.add(magicHadRunClass);
+					}
+				}, t * 6);
+			}
+			await sleep(t * 6);
+
+			for (const gArr of glyphMap.values()) {
+				for (const g of gArr.els) {
+					g.classList.remove(magicWillHighLightClass);
+					g.classList.remove(magicHadRunClass);
+					g.classList.add(magicHighLightClass);
+				}
+			}
+			await sleep(2000);
+			for (const gArr of glyphMap.values()) {
+				for (const g of gArr.els) {
+					g.classList.remove(magicHighLightClass);
+				}
+			}
+		});
+	const outputArea = textarea()
+		.style({ flexGrow: 1 })
+		.addInto(sideBar)
+		.attr({ readOnly: true });
+
 	const pages = Object.entries(file.data);
 	if (pages.length === 0) return;
 
@@ -551,7 +630,7 @@ function renderMagic(rawfile: FileData) {
 		colWidthRatio: number,
 		textHeight: number,
 		font: font,
-	) {
+	): SVGGElement {
 		const g = document.createElementNS(svgNS, "g");
 
 		const posMap: Record<number, [number, number]> = {
@@ -615,6 +694,7 @@ function renderMagic(rawfile: FileData) {
 		}
 
 		svg.appendChild(g);
+		return g;
 	}
 	function renderRing(
 		centerX: number,
@@ -627,6 +707,7 @@ function renderMagic(rawfile: FileData) {
 			exData: string;
 			exType: "f" | "i" | "o" | "blank";
 		} & { r: number; a: number })[],
+		fName: string,
 	) {
 		const maxItems = fonts.length;
 		const defaultColWidthRatio = (1 / maxItems) * 0.33;
@@ -635,7 +716,7 @@ function renderMagic(rawfile: FileData) {
 			const count = maxItems;
 			const angle = Math.PI / 2 - (j / count) * 2 * Math.PI;
 			const fontData = fonts[j];
-			createFont(
+			const gEl = createFont(
 				centerX,
 				centerY,
 				angle,
@@ -645,6 +726,22 @@ function renderMagic(rawfile: FileData) {
 				fontData.font,
 			);
 			ssArr.push({ ...fontData, a: angle, r: r });
+			if (
+				fontData.exType === "f" ||
+				fontData.exType === "i" ||
+				fontData.exType === "o"
+			) {
+				const id = `${fName}-${fontData.exType === "f" ? fontData.exData : fontData.exData.split("-")[0]}`;
+				const arr = glyphMap.get(id) ?? { els: [], noHlTimer: 0 };
+				arr.els.push(gEl);
+				glyphMap.set(id, arr);
+			}
+			if (fontData.exType === "blank") {
+				const id = `${fName}-blank`;
+				const arr = glyphMap.get(id) ?? { els: [], noHlTimer: 0 };
+				arr.els.push(gEl);
+				glyphMap.set(id, arr);
+			}
 		}
 	}
 
@@ -742,6 +839,7 @@ function renderMagic(rawfile: FileData) {
 			font: font;
 			exData: string;
 			exType: "f" | "i" | "o" | "blank";
+			funcName?: string;
 		}[] = [];
 		const ssPage: ((typeof sPage)[number] & { r: number; a: number })[] = [];
 
@@ -753,6 +851,7 @@ function renderMagic(rawfile: FileData) {
 				font: x[f.functionName] ?? fontMap.undefined,
 				exData: name,
 				exType: "f",
+				funcName: f.functionName,
 			});
 			const fun = functionMap.get(f.functionName);
 			if (!fun) continue;
@@ -818,6 +917,7 @@ function renderMagic(rawfile: FileData) {
 				r,
 				h,
 				ssPage,
+				page.functionId,
 			);
 			usedCont += length;
 			if (usedCont >= sPage.length) break;
@@ -886,6 +986,41 @@ const viewer = view().style({ flexGrow: 1 }).addInto(mainDiv);
 const baseEditor = view("y")
 	.style({ width: "100%", height: "100%" })
 	.addInto(viewer);
+
+const magicHighLightClass = addClass(
+	{},
+	{
+		"& > *": {
+			stroke: "#8a2be2",
+			filter: `drop-shadow(0 0 4px #8a2be2)`,
+			transition: "0.1s",
+		},
+	},
+);
+
+const magicWillHighLightClass = addClass(
+	{},
+	{
+		"& > *": {
+			stroke: "#0001",
+		},
+		"& > circle": {
+			fill: "#0001",
+		},
+	},
+);
+
+const magicHadRunClass = addClass(
+	{},
+	{
+		"& > *": {
+			stroke: "#8a2be220",
+		},
+		"& > circle": {
+			fill: "#8a2be220",
+		},
+	},
+);
 
 // for test
 
