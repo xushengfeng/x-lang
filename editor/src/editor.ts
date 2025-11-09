@@ -649,7 +649,7 @@ function renderMagic(rawfile: FileData) {
 
 	const ringXr: { len: number; r: number; h: number }[] = [
 		{ len: 23, r: 120, h: 24 },
-		{ len: 31, r: 200, h: 24 },
+		{ len: 31, r: 180, h: 24 },
 	];
 	const ringX: typeof ringXr = [];
 
@@ -664,7 +664,8 @@ function renderMagic(rawfile: FileData) {
 		ringX.push({ len: Math.max(42, s.length - allLen), r: 240, h: 24 });
 	}
 	const dLen = allLen - s.length;
-	const xi = Math.ceil(dLen / ringX.at(-1)!.len);
+	const lastRingLen = ringX.length ? (ringX.at(-1)?.len ?? 1) : 1;
+	const xi = Math.ceil(dLen / lastRingLen);
 	for (let i = 0; i < dLen; i++) {
 		const ni = i + Math.floor(i / xi);
 		s.splice(s.length - ni, 0, {
@@ -682,19 +683,77 @@ function renderMagic(rawfile: FileData) {
 		if (usedCont >= s.length) break;
 	}
 
-	function drawLink(
+	// 使用极坐标绘制连线：如果半径相等（近似），绘制以 (cx,cy) 为圆心的短圆弧（顺时针）；否则绘制直线。
+	const existingArcs: { r: number; a1: number; a2: number }[] = [];
+	function drawLinkPolar(
 		pathEl: SVGPathElement,
-		from: { x: number; y: number },
-		to: { x: number; y: number },
+		fromPolar: { r: number; a: number },
+		toPolar: { r: number; a: number },
 	) {
-		const d = `M ${from.x} ${from.y} L ${to.x} ${to.y}`;
-		pathEl.setAttribute("d", d);
-	}
+		const eps = 0.0001;
+		// 若半径相等则绘制圆弧
+		if (Math.abs(fromPolar.r - toPolar.r) < eps) {
+			let r = fromPolar.r;
+			// 规范化角度到 (-PI, PI]
+			function norm(a: number) {
+				while (a <= -Math.PI) a += 2 * Math.PI;
+				while (a > Math.PI) a -= 2 * Math.PI;
+				return a;
+			}
+			const a1 = norm(fromPolar.a);
+			const a2 = norm(toPolar.a);
 
-	function item2Pos(item: (typeof ss)[number]) {
-		const x = cx + item.r * Math.cos(item.a);
-		const y = cy - item.r * Math.sin(item.a);
-		return { x, y };
+			// 强制短弧（largeArcFlag = 0），顺时针：sweepFlag = 0
+			const largeArcFlag = 0;
+			const sweepFlag = 1;
+
+			// 检查与已绘制弧的重叠（在相同或接近半径时）并计算偏移
+			const offsetStep = 6;
+			let overlapCount = 0;
+			for (const ex of existingArcs) {
+				if (Math.abs(ex.r - r) > 1) continue;
+				// 简单近似：若角区间有交集则认为重叠
+				// 将 ex 区间归一为 [s2,e2]，而本区间考虑短弧方向
+				let s1 = a1;
+				let e1 = a2;
+				// 确保 s1..e1 表示短弧区间
+				let d = e1 - s1;
+				while (d <= -Math.PI) d += 2 * Math.PI;
+				while (d > Math.PI) d -= 2 * Math.PI;
+				if (d < 0) [s1, e1] = [e1, s1];
+
+				let s2 = norm(ex.a1);
+				let e2 = norm(ex.a2);
+				let d2 = e2 - s2;
+				while (d2 <= -Math.PI) d2 += 2 * Math.PI;
+				while (d2 > Math.PI) d2 -= 2 * Math.PI;
+				if (d2 < 0) [s2, e2] = [e2, s2];
+
+				const inter = !(e1 < s2 || e2 < s1);
+				if (inter) overlapCount++;
+			}
+			if (overlapCount > 0) {
+				const sign = overlapCount % 2 === 0 ? 1 : -1;
+				const n = Math.ceil(overlapCount / 2);
+				r = r + sign * n * offsetStep;
+			}
+
+			const x1 = cx + r * Math.cos(fromPolar.a);
+			const y1 = cy - r * Math.sin(fromPolar.a);
+			const x2 = cx + r * Math.cos(toPolar.a);
+			const y2 = cy - r * Math.sin(toPolar.a);
+			const d = `M ${x1} ${y1} A ${r} ${r} 0 ${largeArcFlag} ${sweepFlag} ${x2} ${y2}`;
+			pathEl.setAttribute("d", d);
+			existingArcs.push({ r, a1: fromPolar.a, a2: toPolar.a });
+		} else {
+			// 直线
+			const x1 = cx + fromPolar.r * Math.cos(fromPolar.a);
+			const y1 = cy - fromPolar.r * Math.sin(fromPolar.a);
+			const x2 = cx + toPolar.r * Math.cos(toPolar.a);
+			const y2 = cy - toPolar.r * Math.sin(toPolar.a);
+			const d = `M ${x1} ${y1} L ${x2} ${y2}`;
+			pathEl.setAttribute("d", d);
+		}
 	}
 
 	const pageCode = file.data.xxx.code.data;
@@ -710,17 +769,28 @@ function renderMagic(rawfile: FileData) {
 				(i) => i.exType === "i" && i.exData === `${toId}-i-${n.toKey}`,
 			);
 			if (!iItem) continue;
-			oItem.r -= 4;
-			iItem.r -= 4;
-			const p1 = item2Pos(oItem);
-			const p2 = item2Pos(iItem);
+			// 为避免与字形重叠，向内移动一点半径
+			const fromPolar = { r: oItem.r - 8, a: oItem.a };
+			const toPolar = { r: iItem.r - 8, a: iItem.a };
 			const path = document.createElementNS(svgNS, "path");
 			path.setAttribute("fill", "none");
 			path.setAttribute("stroke", "#111");
 			path.setAttribute("stroke-width", "2");
-			drawLink(path, p1, p2);
+			drawLinkPolar(path, fromPolar, toPolar);
 			linkGroup.appendChild(path);
 		}
+	}
+
+	const outerCircle = ringX.at(-1);
+	if (outerCircle) {
+		const circle = document.createElementNS(svgNS, "circle");
+		circle.setAttribute("cx", String(cx));
+		circle.setAttribute("cy", String(cy));
+		circle.setAttribute("r", String(outerCircle.r + outerCircle.h + 8));
+		circle.setAttribute("fill", "none");
+		circle.setAttribute("stroke", "#111");
+		circle.setAttribute("stroke-width", "4");
+		svg.appendChild(circle);
 	}
 }
 
