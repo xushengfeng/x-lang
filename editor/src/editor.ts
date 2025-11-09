@@ -781,9 +781,8 @@ function renderMagic(rawfile: FileData) {
 
 		let allLen = 0;
 		for (const i of ringXr) {
-			if (allLen < sPage.length) {
-				ringX.push(i);
-			}
+			if (allLen >= sPage.length) break;
+			ringX.push(i);
 			allLen += i.len;
 		}
 		if (allLen < sPage.length) {
@@ -795,7 +794,8 @@ function renderMagic(rawfile: FileData) {
 		}
 		const dLen = allLen - sPage.length;
 		const lastRingLen = ringX.length ? (ringX.at(-1)?.len ?? 1) : 1;
-		const xi = Math.ceil(dLen / lastRingLen);
+		const xi = Math.ceil(dLen / (lastRingLen - dLen));
+
 		for (let i = 0; i < dLen; i++) {
 			const ni = i + Math.floor(i / xi);
 			sPage.splice(sPage.length - ni, 0, {
