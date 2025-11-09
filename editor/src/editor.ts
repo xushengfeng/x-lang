@@ -256,7 +256,6 @@ class functionBlock {
 			this.redrawPath(l.path, l.from, l.fromKey, this, l.toKey);
 		}
 	}
-
 	on<K extends keyof typeof this.events>(
 		event: K,
 		cb: (typeof this.events)[K],
@@ -503,51 +502,38 @@ function renderMagic(rawfile: FileData) {
 
 	const viewer = view("x").addInto(baseEditor);
 
-	const s: { font: font; exData: string; exType: "f" | "i" | "o" | "blank" }[] =
-		[];
-
-	const ss: ((typeof s)[number] & { r: number; a: number })[] = [];
-
-	for (const [name, f] of Object.entries(file.data.xxx.code.data)) {
-		if (!x[f.functionName]) {
-			console.warn(`${f.functionName} magic font unfind`);
-		}
-		s.push({
-			font: x[f.functionName] ?? fontMap.undefined,
-			exData: name,
-			exType: "f",
-		});
-		const fun = functionMap.get(f.functionName);
-		if (!fun) continue;
-		for (let i = 0; i < fun.input.length; i++) {
-			s.push({
-				font: io2font(i),
-				exType: "i",
-				exData: `${name}-i-${fun.input[i].name}`,
-			});
-		}
-		for (let i = 0; i < fun.output.length; i++) {
-			s.push({
-				font: io2font(i),
-				exType: "o",
-				exData: `${name}-o-${fun.output[i].name}`,
-			});
-		}
-	}
+	const hexGridSize = 400;
+	const size = hexGridSize * 2 + hexGridSize;
+	const hexGridTopX = size / 2;
+	const hexGridTopY = 200;
 
 	const svgNS = "http://www.w3.org/2000/svg";
-	const size = 600;
-	const cx = size / 2;
-	const cy = size / 2;
-
 	const svg = document.createElementNS(svgNS, "svg");
 	svg.setAttribute("width", String(size));
-	svg.setAttribute("height", String(size));
+	svg.setAttribute("height", String(2048));
 	svg.style.display = "block";
-	const linkGroup = document.createElementNS(svgNS, "g");
-	svg.appendChild(linkGroup);
 	viewer.clear();
 	viewer.el.appendChild(svg);
+
+	const pages = Object.entries(file.data);
+	if (pages.length === 0) return;
+
+	const centers: { x: number; y: number }[] = [];
+	for (let idx = 0; idx < pages.length; idx++) {
+		const stackIdx = Math.floor(idx / 3);
+		const x = idx % 3;
+		let cx = hexGridTopX;
+		let cy = hexGridTopY + stackIdx * hexGridSize;
+		if (x === 1) {
+			cx += hexGridSize * Math.cos(Math.PI / 6);
+			cy += hexGridSize * Math.sin(Math.PI / 6);
+		}
+		if (x === 2) {
+			cx -= hexGridSize * Math.cos(Math.PI / 6);
+			cy += hexGridSize * Math.sin(Math.PI / 6);
+		}
+		centers.push({ x: cx, y: cy });
+	}
 
 	/**
 	 *
@@ -558,6 +544,8 @@ function renderMagic(rawfile: FileData) {
 	 * @param font
 	 */
 	function createFont(
+		centerX: number,
+		centerY: number,
 		angleRad: number,
 		radius: number,
 		colWidthRatio: number,
@@ -591,8 +579,8 @@ function renderMagic(rawfile: FileData) {
 			const finalRadius = radius + radialOffset;
 			const finalAngle = angleRad + deltaAngle;
 
-			const gx = cx + finalRadius * Math.cos(finalAngle);
-			const gy = cy - finalRadius * Math.sin(finalAngle);
+			const gx = centerX + finalRadius * Math.cos(finalAngle);
+			const gy = centerY - finalRadius * Math.sin(finalAngle);
 			return [gx, gy];
 		}
 
@@ -628,7 +616,18 @@ function renderMagic(rawfile: FileData) {
 
 		svg.appendChild(g);
 	}
-	function renderRing(fonts: typeof s, r: number, height: number) {
+	function renderRing(
+		centerX: number,
+		centerY: number,
+		fonts: { font: font; exData: string; exType: "f" | "i" | "o" | "blank" }[],
+		r: number,
+		height: number,
+		ssArr: ({
+			font: font;
+			exData: string;
+			exType: "f" | "i" | "o" | "blank";
+		} & { r: number; a: number })[],
+	) {
 		const maxItems = fonts.length;
 		const defaultColWidthRatio = (1 / maxItems) * 0.33;
 		const defaultTextHeight = height;
@@ -637,58 +636,25 @@ function renderMagic(rawfile: FileData) {
 			const angle = Math.PI / 2 - (j / count) * 2 * Math.PI;
 			const fontData = fonts[j];
 			createFont(
+				centerX,
+				centerY,
 				angle,
 				r,
 				defaultColWidthRatio,
 				defaultTextHeight,
 				fontData.font,
 			);
-			ss.push({ ...fontData, a: angle, r: r });
+			ssArr.push({ ...fontData, a: angle, r: r });
 		}
 	}
 
-	const ringXr: { len: number; r: number; h: number }[] = [
-		{ len: 23, r: 120, h: 24 },
-		{ len: 31, r: 180, h: 24 },
-	];
-	const ringX: typeof ringXr = [];
-
-	let allLen = 0;
-	for (const i of ringXr) {
-		if (allLen < s.length) {
-			ringX.push(i);
-		}
-		allLen += i.len;
-	}
-	if (allLen < s.length) {
-		ringX.push({ len: Math.max(42, s.length - allLen), r: 240, h: 24 });
-	}
-	const dLen = allLen - s.length;
-	const lastRingLen = ringX.length ? (ringX.at(-1)?.len ?? 1) : 1;
-	const xi = Math.ceil(dLen / lastRingLen);
-	for (let i = 0; i < dLen; i++) {
-		const ni = i + Math.floor(i / xi);
-		s.splice(s.length - ni, 0, {
-			font: fontMap.blank,
-			exData: "",
-			exType: "blank",
-		});
-	}
-
-	let usedCont = 0;
-	for (const { len, r, h } of ringX) {
-		const length = len === 0 ? s.length - usedCont : len;
-		renderRing(s.slice(usedCont, usedCont + length), r, h);
-		usedCont += length;
-		if (usedCont >= s.length) break;
-	}
-
-	// 使用极坐标绘制连线：如果半径相等（近似），绘制以 (cx,cy) 为圆心的短圆弧（顺时针）；否则绘制直线。
-	const existingArcs: { r: number; a1: number; a2: number }[] = [];
 	function drawLinkPolar(
 		pathEl: SVGPathElement,
 		fromPolar: { r: number; a: number },
 		toPolar: { r: number; a: number },
+		cx: number,
+		cy: number,
+		existingArcs: { r: number; a1: number; a2: number }[],
 	) {
 		const eps = 0.0001;
 		// 若半径相等则绘制圆弧
@@ -712,11 +678,8 @@ function renderMagic(rawfile: FileData) {
 			let overlapCount = 0;
 			for (const ex of existingArcs) {
 				if (Math.abs(ex.r - r) > 1) continue;
-				// 简单近似：若角区间有交集则认为重叠
-				// 将 ex 区间归一为 [s2,e2]，而本区间考虑短弧方向
 				let s1 = a1;
 				let e1 = a2;
-				// 确保 s1..e1 表示短弧区间
 				let d = e1 - s1;
 				while (d <= -Math.PI) d += 2 * Math.PI;
 				while (d > Math.PI) d -= 2 * Math.PI;
@@ -756,41 +719,138 @@ function renderMagic(rawfile: FileData) {
 		}
 	}
 
-	const pageCode = file.data.xxx.code.data;
-	for (const [fromId, fromData] of Object.entries(pageCode)) {
-		if (!fromData.next) continue;
-		for (const n of fromData.next) {
-			const toId = n.id;
-			const oItem = ss.find(
-				(i) => i.exType === "o" && i.exData === `${fromId}-o-${n.fromKey}`,
-			);
-			if (!oItem) continue;
-			const iItem = ss.find(
-				(i) => i.exType === "i" && i.exData === `${toId}-i-${n.toKey}`,
-			);
-			if (!iItem) continue;
-			// 为避免与字形重叠，向内移动一点半径
-			const fromPolar = { r: oItem.r - 8, a: oItem.a };
-			const toPolar = { r: iItem.r - 8, a: iItem.a };
-			const path = document.createElementNS(svgNS, "path");
-			path.setAttribute("fill", "none");
-			path.setAttribute("stroke", "#111");
-			path.setAttribute("stroke-width", "2");
-			drawLinkPolar(path, fromPolar, toPolar);
-			linkGroup.appendChild(path);
-		}
-	}
+	// 为每个 page 分别渲染一个圆形布局，排列为六边形格子
+	for (let pi = 0; pi < pages.length; pi++) {
+		const [, page] = pages[pi];
+		const center = centers[pi];
 
-	const outerCircle = ringX.at(-1);
-	if (outerCircle) {
-		const circle = document.createElementNS(svgNS, "circle");
-		circle.setAttribute("cx", String(cx));
-		circle.setAttribute("cy", String(cy));
-		circle.setAttribute("r", String(outerCircle.r + outerCircle.h + 8));
-		circle.setAttribute("fill", "none");
-		circle.setAttribute("stroke", "#111");
-		circle.setAttribute("stroke-width", "4");
-		svg.appendChild(circle);
+		const cx = center.x;
+		const cy = center.y;
+
+		// build items for this page
+		const sPage: {
+			font: font;
+			exData: string;
+			exType: "f" | "i" | "o" | "blank";
+		}[] = [];
+		const ssPage: ((typeof sPage)[number] & { r: number; a: number })[] = [];
+
+		for (const [name, f] of Object.entries(page.code.data)) {
+			if (!x[f.functionName]) {
+				console.warn(`${f.functionName} magic font unfind`);
+			}
+			sPage.push({
+				font: x[f.functionName] ?? fontMap.undefined,
+				exData: name,
+				exType: "f",
+			});
+			const fun = functionMap.get(f.functionName);
+			if (!fun) continue;
+			for (let i = 0; i < fun.input.length; i++) {
+				sPage.push({
+					font: io2font(i),
+					exType: "i",
+					exData: `${name}-i-${fun.input[i].name}`,
+				});
+			}
+			for (let i = 0; i < fun.output.length; i++) {
+				sPage.push({
+					font: io2font(i),
+					exType: "o",
+					exData: `${name}-o-${fun.output[i].name}`,
+				});
+			}
+		}
+
+		const ringXr: { len: number; r: number; h: number }[] = [
+			{ len: 13, r: 60, h: 24 },
+			{ len: 23, r: 120, h: 24 },
+			{ len: 31, r: 180, h: 24 },
+		];
+		const ringX: typeof ringXr = [];
+
+		let allLen = 0;
+		for (const i of ringXr) {
+			if (allLen < sPage.length) {
+				ringX.push(i);
+			}
+			allLen += i.len;
+		}
+		if (allLen < sPage.length) {
+			ringX.push({
+				len: Math.max(42, sPage.length - allLen),
+				r: 240,
+				h: 24,
+			});
+		}
+		const dLen = allLen - sPage.length;
+		const lastRingLen = ringX.length ? (ringX.at(-1)?.len ?? 1) : 1;
+		const xi = Math.ceil(dLen / lastRingLen);
+		for (let i = 0; i < dLen; i++) {
+			const ni = i + Math.floor(i / xi);
+			sPage.splice(sPage.length - ni, 0, {
+				font: fontMap.blank,
+				exData: "",
+				exType: "blank",
+			});
+		}
+
+		const linkGroup = document.createElementNS(svgNS, "g");
+		svg.appendChild(linkGroup);
+
+		let usedCont = 0;
+		for (const { len, r, h } of ringX) {
+			const length = len === 0 ? sPage.length - usedCont : len;
+			renderRing(
+				cx,
+				cy,
+				sPage.slice(usedCont, usedCont + length),
+				r,
+				h,
+				ssPage,
+			);
+			usedCont += length;
+			if (usedCont >= sPage.length) break;
+		}
+
+		const existingArcs: { r: number; a1: number; a2: number }[] = [];
+
+		const pageCode = page.code.data;
+		for (const [fromId, fromData] of Object.entries(pageCode)) {
+			if (!fromData.next) continue;
+			for (const n of fromData.next) {
+				const toId = n.id;
+				const oItem = ssPage.find(
+					(i) => i.exType === "o" && i.exData === `${fromId}-o-${n.fromKey}`,
+				);
+				if (!oItem) continue;
+				const iItem = ssPage.find(
+					(i) => i.exType === "i" && i.exData === `${toId}-i-${n.toKey}`,
+				);
+				if (!iItem) continue;
+				// 为避免与字形重叠，向内移动一点半径
+				const fromPolar = { r: oItem.r - 8, a: oItem.a };
+				const toPolar = { r: iItem.r - 8, a: iItem.a };
+				const path = document.createElementNS(svgNS, "path");
+				path.setAttribute("fill", "none");
+				path.setAttribute("stroke", "#111");
+				path.setAttribute("stroke-width", "2");
+				drawLinkPolar(path, fromPolar, toPolar, cx, cy, existingArcs);
+				linkGroup.appendChild(path);
+			}
+		}
+
+		const outerCircle = ringX.at(-1);
+		if (outerCircle) {
+			const circle = document.createElementNS(svgNS, "circle");
+			circle.setAttribute("cx", String(cx));
+			circle.setAttribute("cy", String(cy));
+			circle.setAttribute("r", String(outerCircle.r + outerCircle.h + 8));
+			circle.setAttribute("fill", "none");
+			circle.setAttribute("stroke", "#111");
+			circle.setAttribute("stroke-width", "4");
+			svg.appendChild(circle);
+		}
 	}
 }
 
@@ -826,7 +886,28 @@ renderFile({
 	data: {
 		main: {
 			functionId: "main",
-			code: { input: [], output: [], data: {} },
+			code: {
+				input: [
+					{
+						name: "it",
+						mapKey: { id: "0", key: "num" },
+						type: { type: "num" },
+					},
+				],
+				output: [
+					{
+						name: "out",
+						mapKey: { id: "0", key: "num" },
+						type: { type: "num" },
+					},
+				],
+				data: {
+					"0": {
+						functionName: "fib",
+						next: [],
+					},
+				},
+			},
 			geo: {},
 		},
 		xxx: {
