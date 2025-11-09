@@ -267,6 +267,18 @@ class functionBlock {
 
 function renderFile(rawfile: FileData) {
 	const file = structuredClone(rawfile);
+	toolsBar.add([
+		button("编辑").on("click", () => {
+			renderEditor(file);
+		}),
+		button("奇幻").on("click", () => {
+			renderMagic(file);
+		}),
+	]);
+}
+
+function renderEditor(rawfile: FileData) {
+	const file = structuredClone(rawfile);
 	const xlangEnv = env();
 
 	const vp = { x: 0, y: 0 };
@@ -279,7 +291,7 @@ function renderFile(rawfile: FileData) {
 		.addInto(xWarp);
 	baseEditor.add([pageSelect, xWarp]);
 	const baseEditorRoot = view().style({ position: "absolute" }).addInto(viewer);
-	const ioSetter = view().style({ width: "200px" }).addInto(xWarp);
+	// const ioSetter = view().style({ width: "200px" }).addInto(xWarp);
 
 	viewer.on("wheel", (e) => {
 		e.preventDefault();
@@ -375,7 +387,7 @@ function renderFile(rawfile: FileData) {
 						.addInto(baseEditor);
 					const funs = functionMap;
 					menu.add(
-						Array.from(funs.entries()).map(([name, f]) =>
+						Array.from(funs.keys()).map((name) =>
 							view()
 								.add(txt(name))
 								.on("click", () => {
@@ -398,6 +410,317 @@ function renderFile(rawfile: FileData) {
 				};
 			}),
 		);
+	}
+}
+
+function renderMagic(rawfile: FileData) {
+	const file = structuredClone(rawfile);
+	const xlangEnv = env();
+
+	for (const [pageId, page] of Object.entries(file.data)) {
+		if (pageId === "main") continue;
+		xlangEnv.addFunction(page.functionId, page.code);
+	}
+	functionMap.clear();
+	const funs = xlangEnv.getFunctions();
+	for (const [name, fun] of Object.entries(funs)) {
+		functionMap.set(name, fun);
+	}
+
+	// 7 8 9
+	// 4 5 6
+	// 1 2 3
+	// 这样用数字坐标
+	type FontZb = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9;
+	// 笔画
+	type FontBh = FontZb[];
+	// 字形
+	type font = FontBh[];
+
+	// todo 自动化生成
+	const x: Record<string, font> = {
+		"value.num": [
+			[7, 9],
+			[8, 1],
+			[1, 3],
+		],
+		"math.lessEq": [[9, 4, 3]],
+		"ctrl.split": [
+			[4, 5],
+			[5, 9],
+			[5, 3],
+		],
+		"math.subtract": [[7], [1], [4, 6]],
+		"math.add": [[7], [1], [4, 6], [2, 8]],
+	};
+
+	let magicId = 0;
+	for (const [pageId, page] of Object.entries(file.data)) {
+		if (pageId === "main") continue;
+		x[page.functionId] = [
+			[1, 7],
+			...number2binFont(magicId, [2, 5, 8, 3, 6, 9]),
+		];
+		magicId++;
+	}
+
+	const fontMap: Record<string, font> = {
+		blank: [
+			[7, 9],
+			[1, 3],
+		],
+		undefined: [
+			[7, 9],
+			[9, 3],
+			[3, 1],
+			[1, 7],
+			[1, 9],
+			[3, 7],
+		],
+	};
+
+	function number2binFont(data: number, index: FontZb[]): font {
+		const x: font = [];
+		const b = data.toString(2);
+		for (let i = b.length - 1; i >= 0; i--) {
+			if (b[i] === "1") {
+				x.push([index[b.length - 1 - i]]);
+			}
+		}
+		return x;
+	}
+
+	function io2font(index: number): font {
+		const x: font = [
+			[4, 7],
+			[3, 6],
+		];
+		x.push(...number2binFont(index, [1, 2, 5, 8, 9]));
+		return x;
+	}
+
+	baseEditor.clear();
+
+	const viewer = view("x").addInto(baseEditor);
+
+	const s: { font: font; exData: string; exType: "f" | "i" | "o" | "blank" }[] =
+		[];
+
+	const ss: ((typeof s)[number] & { r: number; a: number })[] = [];
+
+	for (const [name, f] of Object.entries(file.data.xxx.code.data)) {
+		if (!x[f.functionName]) {
+			console.warn(`${f.functionName} magic font unfind`);
+		}
+		s.push({
+			font: x[f.functionName] ?? fontMap.undefined,
+			exData: name,
+			exType: "f",
+		});
+		const fun = functionMap.get(f.functionName);
+		if (!fun) continue;
+		for (let i = 0; i < fun.input.length; i++) {
+			s.push({
+				font: io2font(i),
+				exType: "i",
+				exData: `${name}-i-${fun.input[i].name}`,
+			});
+		}
+		for (let i = 0; i < fun.output.length; i++) {
+			s.push({
+				font: io2font(i),
+				exType: "o",
+				exData: `${name}-o-${fun.output[i].name}`,
+			});
+		}
+	}
+
+	const svgNS = "http://www.w3.org/2000/svg";
+	const size = 600;
+	const cx = size / 2;
+	const cy = size / 2;
+
+	const svg = document.createElementNS(svgNS, "svg");
+	svg.setAttribute("width", String(size));
+	svg.setAttribute("height", String(size));
+	svg.style.display = "block";
+	const linkGroup = document.createElementNS(svgNS, "g");
+	svg.appendChild(linkGroup);
+	viewer.clear();
+	viewer.el.appendChild(svg);
+
+	/**
+	 *
+	 * @param angleRad 弧度
+	 * @param radius 模长
+	 * @param colWidthRatio 字符宽度，比例表示
+	 * @param textHeight 字符高度（1-7距离）
+	 * @param font
+	 */
+	function createFont(
+		angleRad: number,
+		radius: number,
+		colWidthRatio: number,
+		textHeight: number,
+		font: font,
+	) {
+		const g = document.createElementNS(svgNS, "g");
+
+		const posMap: Record<number, [number, number]> = {
+			7: [0, 2],
+			8: [1, 2],
+			9: [2, 2],
+			4: [0, 1],
+			5: [1, 1],
+			6: [2, 1],
+			1: [0, 0],
+			2: [1, 0],
+			3: [2, 0],
+		};
+
+		const perRow = textHeight / 2;
+		const anglePerCol = colWidthRatio * 2 * Math.PI;
+
+		function gridToGlobalPolar(n: number) {
+			const p = posMap[n];
+			const col = p[0];
+			const row = p[1];
+			const colOffset = col - 1;
+			const deltaAngle = -colOffset * anglePerCol; // 逆时针转为顺时针
+			const radialOffset = row * perRow;
+			const finalRadius = radius + radialOffset;
+			const finalAngle = angleRad + deltaAngle;
+
+			const gx = cx + finalRadius * Math.cos(finalAngle);
+			const gy = cy - finalRadius * Math.sin(finalAngle);
+			return [gx, gy];
+		}
+
+		for (const stroke of font) {
+			if (!stroke || stroke.length === 0) continue;
+			if (stroke.length === 1) {
+				// 点
+				const [gx, gy] = gridToGlobalPolar(stroke[0]);
+				const circle = document.createElementNS(svgNS, "circle");
+				circle.setAttribute("cx", String(gx));
+				circle.setAttribute("cy", String(gy));
+				circle.setAttribute("r", "2");
+				circle.setAttribute("fill", "#111");
+				g.appendChild(circle);
+				continue;
+			}
+			const path = document.createElementNS(svgNS, "path");
+			const dParts: string[] = [];
+			for (let k = 0; k < stroke.length; k++) {
+				const n = stroke[k];
+				const [gx, gy] = gridToGlobalPolar(n);
+				if (k === 0) dParts.push(`M ${gx} ${gy}`);
+				else dParts.push(`L ${gx} ${gy}`);
+			}
+			path.setAttribute("d", dParts.join(" "));
+			path.setAttribute("fill", "none");
+			path.setAttribute("stroke", "#111");
+			path.setAttribute("stroke-width", "4");
+			path.setAttribute("stroke-linecap", "round");
+			path.setAttribute("stroke-linejoin", "round");
+			g.appendChild(path);
+		}
+
+		svg.appendChild(g);
+	}
+	function renderRing(fonts: typeof s, r: number, height: number) {
+		const maxItems = fonts.length;
+		const defaultColWidthRatio = (1 / maxItems) * 0.33;
+		const defaultTextHeight = height;
+		for (let j = 0; j < maxItems; j++) {
+			const count = maxItems;
+			const angle = Math.PI / 2 - (j / count) * 2 * Math.PI;
+			const fontData = fonts[j];
+			createFont(
+				angle,
+				r,
+				defaultColWidthRatio,
+				defaultTextHeight,
+				fontData.font,
+			);
+			ss.push({ ...fontData, a: angle, r: r });
+		}
+	}
+
+	const ringXr: { len: number; r: number; h: number }[] = [
+		{ len: 23, r: 120, h: 24 },
+		{ len: 31, r: 200, h: 24 },
+	];
+	const ringX: typeof ringXr = [];
+
+	let allLen = 0;
+	for (const i of ringXr) {
+		if (allLen < s.length) {
+			ringX.push(i);
+		}
+		allLen += i.len;
+	}
+	if (allLen < s.length) {
+		ringX.push({ len: Math.max(42, s.length - allLen), r: 240, h: 24 });
+	}
+	const dLen = allLen - s.length;
+	const xi = Math.ceil(dLen / ringX.at(-1)!.len);
+	for (let i = 0; i < dLen; i++) {
+		const ni = i + Math.floor(i / xi);
+		s.splice(s.length - ni, 0, {
+			font: fontMap.blank,
+			exData: "",
+			exType: "blank",
+		});
+	}
+
+	let usedCont = 0;
+	for (const { len, r, h } of ringX) {
+		const length = len === 0 ? s.length - usedCont : len;
+		renderRing(s.slice(usedCont, usedCont + length), r, h);
+		usedCont += length;
+		if (usedCont >= s.length) break;
+	}
+
+	function drawLink(
+		pathEl: SVGPathElement,
+		from: { x: number; y: number },
+		to: { x: number; y: number },
+	) {
+		const d = `M ${from.x} ${from.y} L ${to.x} ${to.y}`;
+		pathEl.setAttribute("d", d);
+	}
+
+	function item2Pos(item: (typeof ss)[number]) {
+		const x = cx + item.r * Math.cos(item.a);
+		const y = cy - item.r * Math.sin(item.a);
+		return { x, y };
+	}
+
+	const pageCode = file.data.xxx.code.data;
+	for (const [fromId, fromData] of Object.entries(pageCode)) {
+		if (!fromData.next) continue;
+		for (const n of fromData.next) {
+			const toId = n.id;
+			const oItem = ss.find(
+				(i) => i.exType === "o" && i.exData === `${fromId}-o-${n.fromKey}`,
+			);
+			if (!oItem) continue;
+			const iItem = ss.find(
+				(i) => i.exType === "i" && i.exData === `${toId}-i-${n.toKey}`,
+			);
+			if (!iItem) continue;
+			oItem.r -= 4;
+			iItem.r -= 4;
+			const p1 = item2Pos(oItem);
+			const p2 = item2Pos(iItem);
+			const path = document.createElementNS(svgNS, "path");
+			path.setAttribute("fill", "none");
+			path.setAttribute("stroke", "#111");
+			path.setAttribute("stroke-width", "2");
+			drawLink(path, p1, p2);
+			linkGroup.appendChild(path);
+		}
 	}
 }
 
