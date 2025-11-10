@@ -121,8 +121,9 @@ class functionBlock {
 			const e = txt(`${i.name}:${i.type.type}`);
 			e.on("click", () => {
 				if (lastClick === null) {
-					const thisInputSlot = this.inLinks.find((x) => x.toKey === i.name);
-					if (thisInputSlot) {
+					const thisInputSlots = this.inLinks.filter((x) => x.toKey === i.name);
+					if (thisInputSlots.length === 1) {
+						const thisInputSlot = thisInputSlots[0];
 						thisInputSlot.from.unLinkTo(this, thisInputSlot.fromKey, i.name);
 						thisInputSlot.from.emit(
 							"linkAdd",
@@ -136,26 +137,22 @@ class functionBlock {
 							xType: "out",
 							key: thisInputSlot.fromKey,
 						};
-					} else
-						lastClick = { type: "link", block: this, xType: "in", key: i.name };
+					} // 目前只能从to到from
 				} else if (lastClick.type === "link" && lastClick.xType === "in") {
 				} else if (lastClick.type === "link" && lastClick.xType === "out") {
-					const thisInputSlot = this.inLinks.find((x) => x.toKey === i.name);
-					if (thisInputSlot) {
-						thisInputSlot.from.unLinkTo(this, thisInputSlot.fromKey, i.name);
-						thisInputSlot.from.emit(
-							"linkRemove",
-							this,
-							thisInputSlot.fromKey,
-							i.name,
-						);
-					}
 					const l = { ...lastClick };
 					const lastSlot = lastClick.block
 						.getSlots()
 						.outputs.find((o) => o.name === l.key);
 					if (lastSlot) {
-						if (lastSlot.type.type === i.type.type) {
+						if (
+							lastSlot.type.type === i.type.type ||
+							lastSlot.type.type === "any" ||
+							i.type.type === "any" ||
+							lastSlot.type.type === "auto" || // todo 计算auto
+							i.type.type === "auto" ||
+							lastSlot.type.type === "or"
+						) {
 							l.block.linkTo(this, l.key, i.name);
 							l.block.emit("linkAdd", this, l.key, i.name);
 							lastClick = null;
@@ -166,7 +163,7 @@ class functionBlock {
 			return { ...i, el: e };
 		});
 		this.slots.outputs = fun.output.map((o) => {
-			const e = txt(`${o.name}:${o.type.type}`);
+			const e = txt(`${o.name}:${o.type.type}`).style({ cursor: "pointer" });
 			e.on("click", () => {
 				if (lastClick === null) {
 					lastClick = { type: "link", block: this, xType: "out", key: o.name };
@@ -326,6 +323,12 @@ class functionBlock {
 		path.setAttribute("fill", "none");
 		path.setAttribute("stroke", "#555");
 		path.setAttribute("stroke-width", "2");
+		path.style.pointerEvents = "all";
+		path.style.cursor = "pointer";
+		path.ondblclick = () => {
+			this.unLinkTo(target, fromKey, toKey);
+			this.emit("linkRemove", target, fromKey, toKey);
+		};
 		svg.appendChild(path);
 		this.outLinks.push({ fromKey, to: target, toKey, path });
 		target.inLinks.push({ from: this, fromKey, toKey, path });
