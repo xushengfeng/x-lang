@@ -3,6 +3,7 @@ import {
 	addStyle,
 	button,
 	initDKH,
+	input,
 	spacer,
 	textarea,
 	trackPoint,
@@ -39,14 +40,22 @@ let fileData: FileData | undefined;
 
 const thisViewBlock = new Map<string, functionBlock>();
 
-let lastClick: {
-	type: "link";
-	block: functionBlock;
-	xType: "in" | "out";
-	key: string;
-} | null = null;
+let lastClick:
+	| {
+			type: "link";
+			block: functionBlock;
+			xType: "in" | "out";
+			key: string;
+	  }
+	| {
+			type: "bindIo";
+			xType: "in" | "out";
+			cb: (blockId: string, key: string) => void;
+	  }
+	| null = null;
 
 class functionBlock {
+	id: string;
 	fun: NativeFunction;
 	el: ElType<HTMLElement>;
 	posi = { x: 0, y: 0 };
@@ -82,7 +91,12 @@ class functionBlock {
 		linkAdd: () => {},
 		linkRemove: () => {},
 	};
-	constructor(op: { functionName: string; linker: ElType<HTMLElement> }) {
+	constructor(op: {
+		id: string;
+		functionName: string;
+		linker: ElType<HTMLElement>;
+	}) {
+		this.id = op.id;
 		const fun = functionMap.get(op.functionName);
 		if (!fun) throw new Error(`Function ${op.functionName} not found`);
 		this.fun = fun;
@@ -159,6 +173,9 @@ class functionBlock {
 						}
 					}
 				}
+				if (lastClick?.type === "bindIo" && lastClick.xType === "in") {
+					lastClick.cb(this.id, i.name);
+				}
 			});
 			return { ...i, el: e };
 		});
@@ -170,6 +187,9 @@ class functionBlock {
 				} else if (lastClick.type === "link" && lastClick.xType === "out") {
 					lastClick = { type: "link", block: this, xType: "out", key: o.name };
 				} else if (lastClick.type === "link" && lastClick.xType === "in") {
+				}
+				if (lastClick?.type === "bindIo" && lastClick.xType === "out") {
+					lastClick.cb(this.id, o.name);
 				}
 			});
 			return { ...o, el: e };
@@ -464,6 +484,7 @@ function renderEditor(rawfile: FileData) {
 				function addBlock(blockId: string) {
 					const data = page.code.data[blockId];
 					const fb = new functionBlock({
+						id: blockId,
 						functionName: data.functionName,
 						linker,
 					});
@@ -486,15 +507,8 @@ function renderEditor(rawfile: FileData) {
 					});
 
 					fb.on("linkAdd", (to, fromKey, toKey) => {
-						const fromEntry = Array.from(thisViewBlock.entries()).find(
-							([, v]) => v === fb,
-						);
-						const toEntry = Array.from(thisViewBlock.entries()).find(
-							([, v]) => v === to,
-						);
-						if (!fromEntry || !toEntry) return;
-						const fromId = fromEntry[0];
-						const toId = toEntry[0];
+						const fromId = fb.id;
+						const toId = to.id;
 						if (!page.code.data[fromId].next) page.code.data[fromId].next = [];
 						const nextArr = page.code.data[fromId].next;
 						const exists = nextArr.find(
@@ -506,15 +520,8 @@ function renderEditor(rawfile: FileData) {
 					});
 
 					fb.on("linkRemove", (to, fromKey, toKey) => {
-						const fromEntry = Array.from(thisViewBlock.entries()).find(
-							([, v]) => v === fb,
-						);
-						const toEntry = Array.from(thisViewBlock.entries()).find(
-							([, v]) => v === to,
-						);
-						if (!fromEntry || !toEntry) return;
-						const fromId = fromEntry[0];
-						const toId = toEntry[0];
+						const fromId = fb.id;
+						const toId = to.id;
 						const nextArr = page.code.data[fromId].next ?? [];
 						page.code.data[fromId].next = nextArr.filter(
 							(n) =>
@@ -608,6 +615,162 @@ function renderEditor(rawfile: FileData) {
 				};
 
 				ioSetter.clear();
+
+				const inputSetter = view("y").addInto(ioSetter);
+				const inputSetterList = view("y").addInto(inputSetter);
+				button("+")
+					.addInto(inputSetter)
+					.on("click", () => {
+						addInputSetterItem({
+							name: "",
+							type: { type: "any" },
+							mapKey: { id: "", key: "" },
+							uid: crypto.randomUUID(),
+						});
+					});
+
+				const outputSetter = view("y").addInto(ioSetter);
+				const outputSetterList = view("y").addInto(outputSetter);
+				button("+")
+					.addInto(outputSetter)
+					.on("click", () => {
+						addOutputSetterItem({
+							name: "",
+							type: { type: "any" },
+							mapKey: { id: "", key: "" },
+							uid: crypto.randomUUID(),
+						});
+					});
+
+				let tmpInput = page.code.input.map((i) => ({
+					...i,
+					uid: crypto.randomUUID(),
+				}));
+				let tmpOutput = page.code.output.map((i) => ({
+					...i,
+					uid: crypto.randomUUID(),
+				}));
+				function addIoSetterItem<
+					T extends (typeof tmpInput)[number] | (typeof tmpOutput)[number],
+				>(
+					i: T,
+					cb: (data: T) => void,
+					t: "i" | "o",
+					rm: () => void = () => {},
+				) {
+					const data = structuredClone(i);
+					const itemView = view("x");
+					button("#")
+						.addInto(itemView)
+						.on("click", () => {
+							lastClick = {
+								type: "bindIo",
+								xType: t === "i" ? "in" : "out",
+								cb: (blockId, key) => {
+									data.mapKey = { id: blockId, key };
+									cb(data);
+								},
+							};
+						})
+						.on("pointerenter", () => {
+							const block = thisViewBlock.get(data.mapKey.id);
+							if (block) {
+								const slot = block.getSlots()[t === "i" ? "inputs" : "outputs"];
+								slot
+									.find((i) => i.name === data.mapKey.key)
+									?.el.el.classList.add(editorBlockSlotHighlightClass);
+							}
+						})
+						.on("pointerleave", () => {
+							const block = thisViewBlock.get(data.mapKey.id);
+							if (block) {
+								const slot = block.getSlots()[t === "i" ? "inputs" : "outputs"];
+								slot
+									.find((i) => i.name === data.mapKey.key)
+									?.el.el.classList.remove(editorBlockSlotHighlightClass);
+							}
+						});
+					const nameTxt = input()
+						.style({ maxWidth: "80px" })
+						.addInto(itemView)
+						.sv(data.name)
+						.on("change", () => {
+							data.name = nameTxt.gv;
+							cb(data);
+						});
+					const typeEl = input()
+						.style({ maxWidth: "80px" })
+						.addInto(itemView)
+						.sv(JSON.stringify(data.type.type))
+						.on("change", () => {
+							data.type.type = JSON.parse(typeEl.gv);
+							cb(data);
+						});
+					itemView.add([
+						spacer(),
+						button("x").on("click", () => {
+							rm();
+							itemView.remove();
+						}),
+					]);
+
+					return itemView;
+				}
+				function addInputSetterItem(i: (typeof tmpInput)[number]) {
+					const el = addIoSetterItem(
+						i,
+						(data) => {
+							const i = tmpInput.findIndex((x) => x.uid === data.uid);
+							if (i >= 0) tmpInput[i] = data;
+							page.code.input = tmpInput.map((i) => {
+								const { uid: _, ...o } = structuredClone(i);
+								return o;
+							});
+							fileData = structuredClone(file);
+						},
+						"i",
+						() => {
+							tmpInput = tmpInput.filter((x) => x.uid !== i.uid);
+							page.code.input = tmpInput.map((i) => {
+								const { uid: _, ...o } = structuredClone(i);
+								return o;
+							});
+							fileData = structuredClone(file);
+						},
+					);
+					inputSetterList.add(el);
+				}
+				function addOutputSetterItem(i: (typeof tmpOutput)[number]) {
+					const el = addIoSetterItem(
+						i,
+						(data) => {
+							const i = tmpOutput.findIndex((x) => x.uid === data.uid);
+							if (i >= 0) tmpOutput[i] = data;
+							page.code.output = tmpOutput.map((i) => {
+								const { uid: _, ...o } = structuredClone(i);
+								return o;
+							});
+							fileData = structuredClone(file);
+						},
+						"o",
+						() => {
+							tmpOutput = tmpOutput.filter((x) => x.uid !== i.uid);
+							page.code.output = tmpOutput.map((i) => {
+								const { uid: _, ...o } = structuredClone(i);
+								return o;
+							});
+							fileData = structuredClone(file);
+						},
+					);
+					outputSetterList.add(el);
+				}
+				for (const i of tmpInput) {
+					addInputSetterItem(i);
+				}
+				for (const o of tmpOutput) {
+					addOutputSetterItem(o);
+				}
+
 				const inputArea = textarea()
 					.style({ height: "150px" })
 					.addInto(ioSetter);
@@ -1295,6 +1458,12 @@ const editorBlockCloseButtonClass = addClass(
 			opacity: 1,
 		},
 	},
+);
+const editorBlockSlotHighlightClass = addClass(
+	{
+		outline: "2px solid #0ff",
+	},
+	{},
 );
 
 const magicHighLightBaseClass = addClass(
