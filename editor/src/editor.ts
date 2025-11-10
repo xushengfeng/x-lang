@@ -491,6 +491,44 @@ function typedDataInput(type: "num" | "string" | "bool") {
 	return el;
 }
 
+function superArgsInput() {
+	const data = new Map<string, { el: ElType<HTMLElement>; type: string }>();
+	const el = view("y")
+		.bindSet((v: Record<string, unknown>) => {
+			el.clear();
+			data.clear();
+			for (const [k, val] of Object.entries(v)) {
+				const inputEl = typedDataInput(
+					typeof val === "number"
+						? "num"
+						: typeof val === "string"
+							? "string"
+							: typeof val === "boolean"
+								? "bool"
+								: "string",
+				);
+				el.add(
+					view("x")
+						.style({ justifyContent: "space-between" })
+						.add([txt(k), inputEl]),
+				);
+				data.set(k, { el: inputEl, type: typeof val });
+			}
+		})
+		.bindGet(() => {
+			const jsonI: string[] = [];
+			for (const [k, inputEl] of data.entries()) {
+				const v = inputEl.el.gv;
+				jsonI.push(
+					`"${k}":${inputEl.type === "number" || inputEl.type === "string" || inputEl.type === "boolean" ? JSON.stringify(v) : v}`,
+				);
+			}
+			return JSON.parse(`{${jsonI.join(",")}}`);
+		});
+
+	return el;
+}
+
 function renderEditor(rawfile: FileData) {
 	const file = structuredClone(rawfile);
 	const xlangEnv = env({
@@ -828,6 +866,8 @@ function renderEditor(rawfile: FileData) {
 							return o;
 						});
 						fileData = structuredClone(file);
+
+						updateInputX();
 					},
 					"i",
 					() => {
@@ -872,12 +912,28 @@ function renderEditor(rawfile: FileData) {
 				addOutputSetterItem(o);
 			}
 
-			const inputArea = textarea().style({ height: "150px" }).addInto(ioSetter);
+			function updateInputX() {
+				inputArea.sv(
+					Object.fromEntries(
+						page.code.input.map((i) => [
+							i.name,
+							i.type.type === "bool"
+								? false
+								: i.type.type === "num"
+									? 0
+									: undefined,
+						]),
+					),
+				);
+			}
+
+			const inputArea = superArgsInput().addInto(ioSetter);
+			updateInputX();
 			button("运行")
 				.addInto(ioSetter)
 				.on("click", () => {
 					runInfo.clear();
-					const input = JSON.parse(inputArea.gv);
+					const input = inputArea.gv;
 					const r = xlangEnv.run(page.code, input);
 					outputArea.sv(JSON.stringify(r, null, 2));
 				});
@@ -1096,13 +1152,26 @@ function renderMagic(rawfile: FileData) {
 	const glyphMap = new Map<string, { els: SVGGElement[]; noHlTimer: number }>();
 
 	const sideBar = view("y").addInto(viewer);
-	const inputArea = textarea().addInto(sideBar);
+	const inputArea = superArgsInput()
+		.sv(
+			Object.fromEntries(
+				file.data.main.code.input.map((i) => [
+					i.name,
+					i.type.type === "bool"
+						? false
+						: i.type.type === "num"
+							? 0
+							: undefined,
+				]),
+			),
+		)
+		.addInto(sideBar);
 	button("运行")
 		.addInto(sideBar)
 		.on("click", async () => {
 			cancelRun = false;
 			const code = inputArea.gv;
-			const x = JSON.parse(code);
+			const x = code;
 
 			runInfo.clear();
 
@@ -1625,6 +1694,9 @@ const baseEditor = view("y")
 
 addStyle({
 	textarea: {
+		backgroundColor: "transparent",
+	},
+	input: {
 		backgroundColor: "transparent",
 	},
 });
