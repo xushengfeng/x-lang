@@ -109,8 +109,9 @@ class functionBlock {
 			})
 			.class(editorBlockBaseClass);
 		const title = view("x");
-		const titleT = txt(op.functionName).addInto(title);
-		title.add(spacer());
+		const titleT = txt(op.functionName)
+			.style({ flexGrow: 1, userSelect: "none" })
+			.addInto(title);
 		button("x")
 			.class(editorBlockCloseButtonClass)
 			.on("click", () => {
