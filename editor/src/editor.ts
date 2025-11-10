@@ -376,6 +376,7 @@ class functionBlock {
 			?.defaultInput?.style({ display: "none" });
 		await sleep(10);
 		this.redrawPath(path, this, fromKey, target, toKey);
+		target.redrawLinkedPaths();
 	}
 	unLinkTo(target: functionBlock, fromKey: string, toKey: string) {
 		const svg = functionBlock.ensureSvg(this.linker);
@@ -394,6 +395,7 @@ class functionBlock {
 			.getSlots()
 			.inputs.find((i) => i.name === toKey)
 			?.defaultInput?.style({ display: "" });
+		target.redrawLinkedPaths();
 	}
 	private redrawPath(
 		path: SVGPathElement,
