@@ -38,6 +38,13 @@ let fileData: FileData | undefined;
 
 const thisViewBlock = new Map<string, functionBlock>();
 
+let lastClick: {
+	type: "link";
+	block: functionBlock;
+	xType: "in" | "out";
+	key: string;
+} | null = null;
+
 class functionBlock {
 	fun: NativeFunction;
 	el: ElType<HTMLElement>;
@@ -83,11 +90,51 @@ class functionBlock {
 		const outputEl = view("y").style({ alignItems: "end" }).addInto(slot);
 
 		this.slots.inputs = fun.input.map((i) => {
-			const e = txt(i.name + ":" + i.type.type);
+			const e = txt(`${i.name}:${i.type.type}`);
+			e.on("click", () => {
+				if (lastClick === null) {
+					const thisInputSlot = this.inLinks.find((x) => x.toKey === i.name);
+					if (thisInputSlot) {
+						thisInputSlot.from.unLinkTo(this, thisInputSlot.fromKey, i.name);
+						lastClick = {
+							type: "link",
+							block: thisInputSlot.from,
+							xType: "out",
+							key: thisInputSlot.fromKey,
+						};
+					} else
+						lastClick = { type: "link", block: this, xType: "in", key: i.name };
+				} else if (lastClick.type === "link" && lastClick.xType === "in") {
+				} else if (lastClick.type === "link" && lastClick.xType === "out") {
+					const thisInputSlot = this.inLinks.find((x) => x.toKey === i.name);
+					if (thisInputSlot) {
+						thisInputSlot.from.unLinkTo(this, thisInputSlot.fromKey, i.name);
+					}
+					const l = { ...lastClick };
+					const lastSlot = lastClick.block
+						.getSlots()
+						.outputs.find((o) => o.name === l.key);
+					if (lastSlot) {
+						if (lastSlot.type.type === i.type.type) {
+							l.block.linkTo(this, l.key, i.name);
+							// todo 触发事件，修改数据
+							lastClick = null;
+						}
+					}
+				}
+			});
 			return { ...i, el: e };
 		});
 		this.slots.outputs = fun.output.map((o) => {
-			const e = txt(o.name + ":" + o.type.type);
+			const e = txt(`${o.name}:${o.type.type}`);
+			e.on("click", () => {
+				if (lastClick === null) {
+					lastClick = { type: "link", block: this, xType: "out", key: o.name };
+				} else if (lastClick.type === "link" && lastClick.xType === "out") {
+					lastClick = { type: "link", block: this, xType: "out", key: o.name };
+				} else if (lastClick.type === "link" && lastClick.xType === "in") {
+				}
+			});
 			return { ...o, el: e };
 		});
 
@@ -239,6 +286,20 @@ class functionBlock {
 		this.outLinks.push({ fromKey, to: target, toKey, path });
 		target.inLinks.push({ from: this, fromKey, toKey, path });
 		this.redrawPath(path, this, fromKey, target, toKey);
+	}
+	unLinkTo(target: functionBlock, fromKey: string, toKey: string) {
+		const svg = functionBlock.ensureSvg(this.linker);
+		if (!svg) return;
+		const path = this.outLinks.find(
+			(x) => x.fromKey === fromKey && x.toKey === toKey && x.to === target,
+		);
+		if (path) {
+			svg.removeChild(path.path);
+			this.outLinks = this.outLinks.filter((x) => x !== path);
+			target.inLinks = target.inLinks.filter(
+				(x) => !(x.from === this && x.fromKey === fromKey && x.toKey === toKey),
+			);
+		}
 	}
 	private redrawPath(
 		path: SVGPathElement,
@@ -404,9 +465,30 @@ function renderEditor(rawfile: FileData) {
 							zIndex: 1000,
 						})
 						.addInto(baseEditor);
-					const funs = functionMap;
+					let funs = Array.from(functionMap);
+					if (lastClick?.type === "link") {
+						const l = { ...lastClick };
+						if (lastClick.xType === "in") {
+							const inType = lastClick.block
+								.getSlots()
+								.inputs.find((i) => i.name === l.key)?.type;
+							funs = funs.filter(([_, f]) =>
+								f.output.find((o) => o.type.type === inType?.type),
+							);
+						}
+						if (lastClick.xType === "out") {
+							const outType = lastClick.block
+								.getSlots()
+								.outputs.find((o) => o.name === l.key)?.type;
+							funs = funs.filter(([_, f]) =>
+								f.input.find((i) => i.type.type === outType?.type),
+							);
+						}
+						lastClick = null;
+						// todo link
+					}
 					menu.add(
-						Array.from(funs.keys()).map((name) =>
+						funs.map(([name]) =>
 							view()
 								.add(txt(name))
 								.on("click", () => {
@@ -426,6 +508,10 @@ function renderEditor(rawfile: FileData) {
 								}),
 						),
 					);
+				};
+
+				viewer.el.onclick = () => {
+					if (lastClick) lastClick = null;
 				};
 
 				ioSetter.clear();
