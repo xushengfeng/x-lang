@@ -921,6 +921,7 @@ function env(op?: {
 	};
 
 	const cache = new Map<string, Record<string, unknown>>();
+	const cacheFunName = op?.cache ? new Set<string>() : undefined;
 
 	function run0(
 		x: XFunction,
@@ -1042,10 +1043,13 @@ function env(op?: {
 				if (op?.cache) {
 					key = `${nowX.functionName}::${JSON.stringify(args)}`;
 					res = cache.get(key);
+					if (res) {
+						log.info("cache hit", key);
+					}
 				}
 				if (!res) res = f.fun(args, cb);
-				if (op?.cache?.max) {
-					if (key) {
+				if (op?.cache?.max && key) {
+					if (!cacheFunName || cacheFunName.has(nowX.functionName)) {
 						cache.set(key, res);
 						if (cache.size > op.cache.max) {
 							const firstKey = Array.from(cache.keys())[0];
@@ -1301,6 +1305,7 @@ function env(op?: {
 			return x;
 		},
 		addFunction: (name: string, x: XFunction) => {
+			cacheFunName?.add(name);
 			funs[name] = {
 				input: x.input,
 				output: x.output,
