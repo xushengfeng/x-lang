@@ -2,6 +2,7 @@ import {
 	addClass,
 	addStyle,
 	button,
+	check,
 	initDKH,
 	input,
 	spacer,
@@ -62,6 +63,7 @@ class functionBlock {
 	private slots = {
 		inputs: [] as (NativeFunction["input"][number] & {
 			el: ElType<HTMLElement>;
+			defaultInput?: ElType<HTMLElement>;
 		})[],
 		outputs: [] as (NativeFunction["output"][number] & {
 			el: ElType<HTMLElement>;
@@ -85,11 +87,13 @@ class functionBlock {
 		blockRemove: () => void;
 		linkAdd: (to: functionBlock, fromKey: string, toKey: string) => void;
 		linkRemove: (to: functionBlock, fromKey: string, toKey: string) => void;
+		defaultValue: (key: string, value: unknown) => void;
 	} = {
 		blockMoveEnd: () => {},
 		blockRemove: () => {},
 		linkAdd: () => {},
 		linkRemove: () => {},
+		defaultValue: () => {},
 	};
 	constructor(op: {
 		id: string;
@@ -178,7 +182,17 @@ class functionBlock {
 					lastClick.cb(this.id, i.name);
 				}
 			});
-			return { ...i, el: e };
+			let di: ElType<HTMLElement> | undefined;
+			if (
+				i.type.type === "bool" ||
+				i.type.type === "string" ||
+				i.type.type === "num"
+			) {
+				di = typedDataInput(i.type.type).on("change", () => {
+					this.emit("defaultValue", i.name, di?.gv);
+				});
+			}
+			return { ...i, el: e, defaultInput: di };
 		});
 		this.slots.outputs = fun.output.map((o) => {
 			const e = txt(`${o.name}:${o.type.type}`).style({ cursor: "pointer" });
@@ -196,7 +210,9 @@ class functionBlock {
 			return { ...o, el: e };
 		});
 
-		inputEl.add(this.slots.inputs.map((i) => i.el));
+		inputEl.add(
+			this.slots.inputs.map((i) => view("y").add(i.el).add(i.defaultInput)),
+		);
 		outputEl.add(this.slots.outputs.map((o) => o.el));
 
 		trackPoint(titleT, {
@@ -337,7 +353,7 @@ class functionBlock {
 		const d = `M ${from.x} ${from.y} C ${from.x + c} ${from.y}, ${to.x - c} ${to.y}, ${to.x} ${to.y}`;
 		pathEl.setAttribute("d", d);
 	}
-	linkTo(target: functionBlock, fromKey: string, toKey: string) {
+	async linkTo(target: functionBlock, fromKey: string, toKey: string) {
 		const svg = functionBlock.ensureSvg(this.linker);
 		if (!svg) return;
 		const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
@@ -353,6 +369,12 @@ class functionBlock {
 		svg.appendChild(path);
 		this.outLinks.push({ fromKey, to: target, toKey, path });
 		target.inLinks.push({ from: this, fromKey, toKey, path });
+
+		target
+			.getSlots()
+			.inputs.find((i) => i.name === toKey)
+			?.defaultInput?.style({ display: "none" });
+		await sleep(10);
 		this.redrawPath(path, this, fromKey, target, toKey);
 	}
 	unLinkTo(target: functionBlock, fromKey: string, toKey: string) {
@@ -368,6 +390,10 @@ class functionBlock {
 				(x) => !(x.from === this && x.fromKey === fromKey && x.toKey === toKey),
 			);
 		}
+		target
+			.getSlots()
+			.inputs.find((i) => i.name === toKey)
+			?.defaultInput?.style({ display: "" });
 	}
 	private redrawPath(
 		path: SVGPathElement,
@@ -394,6 +420,11 @@ class functionBlock {
 			this.redrawPath(l.path, l.from, l.fromKey, this, l.toKey);
 		}
 	}
+	setDefaultInput(key: string, value: unknown) {
+		this.getSlots()
+			.inputs.find((i) => i.name === key)
+			?.defaultInput?.sv(value);
+	}
 	on<K extends keyof typeof this.events>(
 		event: K,
 		cb: (typeof this.events)[K],
@@ -417,6 +448,47 @@ function renderFile(rawfile: FileData) {
 			if (fileData) renderMagic(fileData);
 		}),
 	]);
+}
+
+function typedDataInput(type: "num" | "string" | "bool") {
+	const el = view();
+	function change() {
+		el.el.dispatchEvent(new CustomEvent("change"));
+	}
+	if (type === "num") {
+		const inputX = input("number")
+			.style({ maxWidth: "60px" })
+			.on("change", change);
+		return el
+			.add(inputX)
+			.bindGet(() => {
+				const v = Number(inputX.gv);
+				if (Number.isNaN(v)) {
+					return 0;
+				}
+				return v;
+			})
+			.bindSet((v: number) => inputX.sv(String(v)));
+	}
+	if (type === "string") {
+		const inputX = input("text")
+			.style({ maxWidth: "60px" })
+			.on("change", change);
+		return el
+			.add(inputX)
+			.bindGet(() => {
+				return inputX.gv;
+			})
+			.bindSet((v: string) => inputX.sv(v));
+	}
+	if (type === "bool") {
+		const inputX = check("").on("change", change);
+		return el
+			.add(inputX)
+			.bindGet(() => inputX.gv)
+			.bindSet((v: boolean) => inputX.sv(v));
+	}
+	return el;
 }
 
 function renderEditor(rawfile: FileData) {
@@ -494,6 +566,9 @@ function renderEditor(rawfile: FileData) {
 				thisViewBlock.set(blockId, fb);
 				const geo = page.geo[blockId];
 				if (geo) fb.setPosi(geo.x, geo.y);
+				for (const [k, v] of Object.entries(data.defaultValues || {})) {
+					fb.setDefaultInput(k, v);
+				}
 
 				fb.on("blockMoveEnd", () => {
 					page.geo[blockId] = { x: fb.posi.x, y: fb.posi.y };
@@ -527,6 +602,14 @@ function renderEditor(rawfile: FileData) {
 						(n) =>
 							!(n.id === toId && n.fromKey === fromKey && n.toKey === toKey),
 					);
+					fileData = structuredClone(file);
+				});
+
+				fb.on("defaultValue", (key, value) => {
+					if (!page.code.data[blockId].defaultValues)
+						page.code.data[blockId].defaultValues = {};
+					// biome-ignore lint/style/noNonNullAssertion: checked above
+					page.code.data[blockId].defaultValues![key] = value;
 					fileData = structuredClone(file);
 				});
 			}
