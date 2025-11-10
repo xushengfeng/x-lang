@@ -812,7 +812,7 @@ function renderEditor(rawfile: FileData) {
 					mapKey: { id: "", key: "" },
 					uid: crypto.randomUUID(),
 				});
-				addInputSetterItem(tmpInput[0]);
+				addInputSetterItem(tmpInput[tmpInput.length - 1]);
 			});
 
 		const outputSetter = view("y").addInto(ioSetter);
@@ -826,7 +826,7 @@ function renderEditor(rawfile: FileData) {
 					mapKey: { id: "", key: "" },
 					uid: crypto.randomUUID(),
 				});
-				addOutputSetterItem(tmpOutput[0]);
+				addOutputSetterItem(tmpOutput[tmpOutput.length - 1]);
 			});
 
 		let tmpInput = page.code.input.map((i) => ({
