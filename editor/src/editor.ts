@@ -408,12 +408,13 @@ async function sleep(T: number) {
 
 function renderFile(rawfile: FileData) {
 	const file = structuredClone(rawfile);
+	fileData = file;
 	toolsBar.add([
 		button("编辑").on("click", () => {
-			renderEditor(file);
+			if (fileData) renderEditor(fileData);
 		}),
 		button("奇幻").on("click", () => {
-			renderMagic(file);
+			if (fileData) renderMagic(fileData);
 		}),
 	]);
 }
