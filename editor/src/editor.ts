@@ -71,7 +71,17 @@ class functionBlock {
 		path: SVGPathElement;
 	}[] = [];
 	private linker: ElType<HTMLElement>;
-	private events: { blockMoveEnd: () => void } = { blockMoveEnd: () => {} };
+	private events: {
+		blockMoveEnd: () => void;
+		blockRemove: () => void;
+		linkAdd: (to: functionBlock, fromKey: string, toKey: string) => void;
+		linkRemove: (to: functionBlock, fromKey: string, toKey: string) => void;
+	} = {
+		blockMoveEnd: () => {},
+		blockRemove: () => {},
+		linkAdd: () => {},
+		linkRemove: () => {},
+	};
 	constructor(op: { functionName: string; linker: ElType<HTMLElement> }) {
 		const fun = functionMap.get(op.functionName);
 		if (!fun) throw new Error(`Function ${op.functionName} not found`);
@@ -93,11 +103,13 @@ class functionBlock {
 				this.el.remove();
 				for (const link of this.inLinks) {
 					link.from.unLinkTo(this, link.fromKey, link.toKey);
+					link.from.emit("linkRemove", this, link.fromKey, link.toKey);
 				}
 				for (const link of this.outLinks) {
 					this.unLinkTo(link.to, link.fromKey, link.toKey);
+					this.emit("linkRemove", link.to, link.fromKey, link.toKey);
 				}
-				// todo 触发事件，修改数据
+				this.emit("blockRemove");
 			})
 			.addInto(title);
 		this.el.add(title);
@@ -112,6 +124,12 @@ class functionBlock {
 					const thisInputSlot = this.inLinks.find((x) => x.toKey === i.name);
 					if (thisInputSlot) {
 						thisInputSlot.from.unLinkTo(this, thisInputSlot.fromKey, i.name);
+						thisInputSlot.from.emit(
+							"linkAdd",
+							this,
+							thisInputSlot.fromKey,
+							i.name,
+						);
 						lastClick = {
 							type: "link",
 							block: thisInputSlot.from,
@@ -125,6 +143,12 @@ class functionBlock {
 					const thisInputSlot = this.inLinks.find((x) => x.toKey === i.name);
 					if (thisInputSlot) {
 						thisInputSlot.from.unLinkTo(this, thisInputSlot.fromKey, i.name);
+						thisInputSlot.from.emit(
+							"linkRemove",
+							this,
+							thisInputSlot.fromKey,
+							i.name,
+						);
 					}
 					const l = { ...lastClick };
 					const lastSlot = lastClick.block
@@ -133,7 +157,7 @@ class functionBlock {
 					if (lastSlot) {
 						if (lastSlot.type.type === i.type.type) {
 							l.block.linkTo(this, l.key, i.name);
-							// todo 触发事件，修改数据
+							l.block.emit("linkAdd", this, l.key, i.name);
 							lastClick = null;
 						}
 					}
@@ -170,8 +194,12 @@ class functionBlock {
 			},
 		});
 	}
-	private emit(key: keyof typeof this.events) {
-		this.events[key]();
+	private emit<K extends keyof typeof this.events>(
+		key: K,
+		...args: Parameters<(typeof this.events)[K]>
+	) {
+		const fn = this.events[key] as unknown as (...a: unknown[]) => void;
+		if (fn) fn(...(args as unknown[]));
 	}
 	setPosi(x: number, y: number) {
 		const myRect = this.getRect({ dx: 4, dy: 4 });
@@ -444,6 +472,51 @@ function renderEditor(rawfile: FileData) {
 
 					fb.on("blockMoveEnd", () => {
 						page.geo[blockId] = { x: fb.posi.x, y: fb.posi.y };
+						fileData = structuredClone(file);
+					});
+
+					fb.on("blockRemove", () => {
+						delete page.code.data[blockId];
+						delete page.geo[blockId];
+						thisViewBlock.delete(blockId);
+						fileData = structuredClone(file);
+					});
+
+					fb.on("linkAdd", (to, fromKey, toKey) => {
+						const fromEntry = Array.from(thisViewBlock.entries()).find(
+							([, v]) => v === fb,
+						);
+						const toEntry = Array.from(thisViewBlock.entries()).find(
+							([, v]) => v === to,
+						);
+						if (!fromEntry || !toEntry) return;
+						const fromId = fromEntry[0];
+						const toId = toEntry[0];
+						if (!page.code.data[fromId].next) page.code.data[fromId].next = [];
+						const nextArr = page.code.data[fromId].next;
+						const exists = nextArr.find(
+							(n) =>
+								n.id === toId && n.fromKey === fromKey && n.toKey === toKey,
+						);
+						if (!exists) nextArr.push({ id: toId, fromKey, toKey });
+						fileData = structuredClone(file);
+					});
+
+					fb.on("linkRemove", (to, fromKey, toKey) => {
+						const fromEntry = Array.from(thisViewBlock.entries()).find(
+							([, v]) => v === fb,
+						);
+						const toEntry = Array.from(thisViewBlock.entries()).find(
+							([, v]) => v === to,
+						);
+						if (!fromEntry || !toEntry) return;
+						const fromId = fromEntry[0];
+						const toId = toEntry[0];
+						const nextArr = page.code.data[fromId].next ?? [];
+						page.code.data[fromId].next = nextArr.filter(
+							(n) =>
+								!(n.id === toId && n.fromKey === fromKey && n.toKey === toKey),
+						);
 						fileData = structuredClone(file);
 					});
 				}
@@ -1198,6 +1271,7 @@ const editorBlockBaseClass = addClass(
 		borderRadius: "4px",
 		padding: "4px",
 		border: "1px solid #ccc",
+		backgroundColor: "#fff",
 	},
 	{},
 );
