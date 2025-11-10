@@ -526,7 +526,8 @@ function renderEditor(rawfile: FileData) {
 					);
 				};
 
-				viewer.el.onclick = () => {
+				viewer.el.onclick = (e) => {
+					if (e.target !== viewer.el) return;
 					if (lastClick) lastClick = null;
 				};
 
