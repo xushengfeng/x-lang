@@ -3,6 +3,7 @@ import {
 	addStyle,
 	button,
 	initDKH,
+	spacer,
 	textarea,
 	trackPoint,
 	txt,
@@ -83,7 +84,22 @@ class functionBlock {
 				position: "absolute",
 			})
 			.class(editorBlockBaseClass);
-		const title = txt(op.functionName);
+		const title = view("x");
+		const titleT = txt(op.functionName).addInto(title);
+		title.add(spacer());
+		button("x")
+			.class(editorBlockCloseButtonClass)
+			.on("click", () => {
+				this.el.remove();
+				for (const link of this.inLinks) {
+					link.from.unLinkTo(this, link.fromKey, link.toKey);
+				}
+				for (const link of this.outLinks) {
+					this.unLinkTo(link.to, link.fromKey, link.toKey);
+				}
+				// todo 触发事件，修改数据
+			})
+			.addInto(title);
 		this.el.add(title);
 		const slot = view("x").style({ gap: "8px" }).addInto(this.el);
 		const inputEl = view("y").addInto(slot);
@@ -141,7 +157,7 @@ class functionBlock {
 		inputEl.add(this.slots.inputs.map((i) => i.el));
 		outputEl.add(this.slots.outputs.map((o) => o.el));
 
-		trackPoint(title, {
+		trackPoint(titleT, {
 			start: () => {
 				return { x: this.posi.x, y: this.posi.y };
 			},
@@ -1190,6 +1206,17 @@ const editorBlockHighlightClass = addClass(
 		background: "#cfc",
 	},
 	{},
+);
+
+const editorBlockCloseButtonClass = addClass(
+	{
+		opacity: 0.2,
+	},
+	{
+		"&:hover": {
+			opacity: 1,
+		},
+	},
 );
 
 const magicHighLightBaseClass = addClass(
