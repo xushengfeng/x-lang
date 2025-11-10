@@ -1183,10 +1183,10 @@ function renderMagic(rawfile: FileData) {
 	baseEditor.clear();
 
 	const viewer = view("x")
-		.style({ backgroundColor: "#000", color: "#fff" })
+		.style({ backgroundColor: "#000", color: "#fff", height: "100%" })
 		.addInto(baseEditor);
 
-	const hexGridSize = 400;
+	const hexGridSize = 480;
 	const size = hexGridSize * 2 + hexGridSize;
 	const hexGridTopX = size / 2;
 	const hexGridTopY = 200;
@@ -1194,11 +1194,13 @@ function renderMagic(rawfile: FileData) {
 	const svgNS = "http://www.w3.org/2000/svg";
 	const svg = document.createElementNS(svgNS, "svg");
 	svg.setAttribute("width", String(size));
-	svg.setAttribute("height", String(2048));
+	svg.setAttribute("viewBox", `0 0 ${size} ${2048}`);
 	svg.style.display = "block";
 	svg.style.backgroundColor = "#000";
+	svg.style.width = "100%";
 	viewer.clear();
-	viewer.el.appendChild(svg);
+	const w = view().style({ flexGrow: 1, overflow: "scroll" }).addInto(viewer);
+	w.el.appendChild(svg);
 
 	const glyphMap = new Map<string, { els: SVGGElement[]; noHlTimer: number }>();
 
@@ -1789,7 +1791,9 @@ button("导出")
 	})
 	.addInto(toolsBar);
 
-const viewer = view().style({ flexGrow: 1 }).addInto(mainDiv);
+const viewer = view()
+	.style({ flexGrow: 1, overflow: "hidden" })
+	.addInto(mainDiv);
 
 const baseEditor = view("y")
 	.style({ width: "100%", height: "100%" })
