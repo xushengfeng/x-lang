@@ -902,7 +902,7 @@ function renderMagic(rawfile: FileData) {
 		magicId++;
 	}
 
-	const fontMap: Record<string, font> = {
+	const fontMap = {
 		blank: [
 			[7, 9],
 			[1, 3],
@@ -915,7 +915,17 @@ function renderMagic(rawfile: FileData) {
 			[1, 9],
 			[3, 7],
 		],
-	};
+		ioBase: [
+			[4, 7],
+			[3, 6],
+		],
+		exDataStart: [[8, 7, 1, 2]],
+		exDataEnd: [[8, 9, 3, 2]],
+		exDataBase: [
+			[7, 8],
+			[1, 3],
+		],
+	} satisfies Record<string, font>;
 
 	function number2binFont(data: number, index: FontZb[]): font {
 		const x: font = [];
@@ -927,12 +937,55 @@ function renderMagic(rawfile: FileData) {
 		}
 		return x;
 	}
+	function toDataView(input: number | string) {
+		if (typeof input === "number") {
+			return input
+				.toString(2)
+				.split("")
+				.map((b) => (b === "1" ? 1 : 0))
+				.reverse();
+		} else {
+			const uint8Array = new TextEncoder().encode(input);
+			const buffer = new ArrayBuffer(uint8Array.length);
+			const view = new DataView(buffer);
+			for (const [index, byte] of uint8Array.entries()) {
+				view.setUint8(index, byte);
+			}
+			const bits: (0 | 1)[] = [];
+
+			// 每个字节：低位在前，高位在后
+			for (let i = 0; i < view.byteLength; i++) {
+				const byte = view.getUint8(i);
+				for (let j = 0; j < 8; j++) {
+					bits.push(((byte >> j) & 1) as 0 | 1);
+				}
+			}
+			// 去掉末尾多余的0
+			let endIndex = bits.length - 1;
+			while (endIndex > 0 && bits[endIndex] === 0) {
+				endIndex--;
+			}
+
+			const b = bits.slice(0, endIndex + 1);
+			return b;
+		}
+	}
+	function binFont(b: (0 | 1)[]): font[] {
+		// 全部点做二进制表示
+		const x: font[] = [];
+		for (let i = 0; i < b.length; i += 9) {
+			const c = b.slice(i, i + 9);
+			const f: font = [];
+			for (let j = 0; j < c.length; j++) {
+				if (c[j]) f.push([(j + 1) as FontZb]);
+			}
+			x.push(f);
+		}
+		return x;
+	}
 
 	function io2font(index: number): font {
-		const x: font = [
-			[4, 7],
-			[3, 6],
-		];
+		const x: font = [...fontMap.ioBase];
 		x.push(...number2binFont(index, [1, 2, 5, 8, 9]));
 		return x;
 	}
@@ -1298,6 +1351,8 @@ function renderMagic(rawfile: FileData) {
 		}[] = [];
 		const ssPage: ((typeof sPage)[number] & { r: number; a: number })[] = [];
 
+		const exData: (0 | 1)[][] = [];
+
 		for (const [name, f] of Object.entries(page.code.data)) {
 			if (!x[f.functionName]) {
 				console.warn(`${f.functionName} magic font unfind`);
@@ -1316,6 +1371,22 @@ function renderMagic(rawfile: FileData) {
 					exType: "i",
 					exData: `${name}-i-${fun.input[i].name}`,
 				});
+				const d = f.defaultValues?.[fun.input[i].name];
+				if (d !== undefined) {
+					const canT = typeof d === "string" || typeof d === "number";
+					if (!canT) {
+						console.log(d, name, f.defaultValues, `is not a valid input`);
+					}
+					exData.push(canT ? toDataView(d) : toDataView(0));
+					sPage.push({
+						font: [
+							...fontMap.exDataBase,
+							...number2binFont(exData.length - 1, [4, 5, 6, 9]),
+						],
+						exType: "f",
+						exData: `${name}-i-default-${fun.input[i].name}`,
+					});
+				}
 			}
 			for (let i = 0; i < fun.output.length; i++) {
 				sPage.push({
@@ -1325,6 +1396,33 @@ function renderMagic(rawfile: FileData) {
 				});
 			}
 		}
+		if (exData.length > 0) {
+			sPage.push({
+				font: fontMap.exDataStart,
+				exType: "f",
+				exData: "exDataStart",
+			});
+		}
+		for (const [i, d] of exData.entries()) {
+			sPage.push({
+				font: [...fontMap.exDataBase, ...number2binFont(i, [4, 5, 6, 9])],
+				exType: "f",
+				exData: "",
+			});
+			for (const f of binFont(d)) {
+				sPage.push({
+					font: f,
+					exType: "f",
+					exData: `exData-${i}`,
+				});
+			}
+		}
+		if (exData.length > 0)
+			sPage.push({
+				font: fontMap.exDataEnd,
+				exType: "f",
+				exData: "exDataEnd",
+			});
 
 		const ringXr: { len: number; r: number; h: number }[] = [
 			{ len: 13, r: 60, h: 24 },
