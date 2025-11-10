@@ -1077,10 +1077,10 @@ const magicWillHighLightClass = addClass(
 	{},
 	{
 		"& > path": {
-			stroke: "#fff5",
+			stroke: "#888",
 		},
 		"& > circle": {
-			fill: "#fff5",
+			fill: "#888",
 		},
 	},
 );
