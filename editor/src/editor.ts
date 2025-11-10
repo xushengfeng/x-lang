@@ -1537,6 +1537,52 @@ function renderMagic(rawfile: FileData) {
 		}
 	}
 
+	const gloConnect = document.createElementNS(svgNS, "g");
+	svg.appendChild(gloConnect);
+
+	const exF = new Set<string>();
+	for (const [, page] of pages) {
+		if (page.functionId !== "main") exF.add(page.functionId);
+	}
+
+	// 全局连接线
+	for (let pi = 0; pi < pages.length; pi++) {
+		const [, page] = pages[pi];
+		const center = centers[pi];
+		const cx = center.x;
+		const cy = center.y;
+		for (const { functionName } of Object.values(page.code.data)) {
+			if (!exF.has(functionName)) continue;
+			// 寻找目标 page
+			const targetPi = pages.findIndex((i) => i[1].functionId === functionName);
+			if (targetPi < 0) continue;
+			const targetCenter = centers[targetPi];
+			// 双股线：在连线两侧各偏移一条平行线
+			const ux = targetCenter.x - cx;
+			const uy = targetCenter.y - cy;
+			const len = Math.hypot(ux, uy) || 1;
+			const nx = -uy / len; // 垂直单位向量
+			const ny = ux / len;
+			const offset = 6; // 两股间距的一半
+
+			for (const s of [-1, 1] as const) {
+				const pathEl = document.createElementNS(svgNS, "path");
+				pathEl.setAttribute("stroke", "#fff");
+				pathEl.setAttribute("stroke-width", "2");
+				pathEl.setAttribute("fill", "none");
+				pathEl.setAttribute("stroke-linecap", "round");
+				gloConnect.appendChild(pathEl);
+
+				const x1 = cx + nx * offset * s;
+				const y1 = cy + ny * offset * s;
+				const x2 = targetCenter.x + nx * offset * s;
+				const y2 = targetCenter.y + ny * offset * s;
+
+				pathEl.setAttribute("d", `M ${x1} ${y1} L ${x2} ${y2}`);
+			}
+		}
+	}
+
 	// 为每个 page 分别渲染一个圆形布局，排列为六边形格子
 	for (let pi = 0; pi < pages.length; pi++) {
 		const [, page] = pages[pi];
@@ -1660,6 +1706,18 @@ function renderMagic(rawfile: FileData) {
 			});
 		}
 
+		const outerCircle = ringX.at(-1);
+		if (outerCircle) {
+			const circle = document.createElementNS(svgNS, "circle");
+			circle.setAttribute("cx", String(cx));
+			circle.setAttribute("cy", String(cy));
+			circle.setAttribute("r", String(outerCircle.r + outerCircle.h + 8));
+			circle.setAttribute("fill", "#000");
+			circle.setAttribute("stroke", mainColor);
+			circle.setAttribute("stroke-width", "4");
+			svg.appendChild(circle);
+		}
+
 		const linkGroup = document.createElementNS(svgNS, "g");
 		svg.appendChild(linkGroup);
 
@@ -1704,18 +1762,6 @@ function renderMagic(rawfile: FileData) {
 				drawLinkPolar(path, fromPolar, toPolar, cx, cy, existingArcs);
 				linkGroup.appendChild(path);
 			}
-		}
-
-		const outerCircle = ringX.at(-1);
-		if (outerCircle) {
-			const circle = document.createElementNS(svgNS, "circle");
-			circle.setAttribute("cx", String(cx));
-			circle.setAttribute("cy", String(cy));
-			circle.setAttribute("r", String(outerCircle.r + outerCircle.h + 8));
-			circle.setAttribute("fill", "none");
-			circle.setAttribute("stroke", mainColor);
-			circle.setAttribute("stroke-width", "4");
-			svg.appendChild(circle);
 		}
 	}
 }
