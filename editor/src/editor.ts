@@ -71,12 +71,11 @@ class functionBlock {
 
 		this.linker = op.linker;
 
-		this.el = view("y").style({
-			position: "absolute",
-			backgroundColor: "lightgray",
-			padding: "4px",
-			border: "1px solid black",
-		});
+		this.el = view("y")
+			.style({
+				position: "absolute",
+			})
+			.class(editorBlockBaseClass);
 		const title = txt(op.functionName);
 		this.el.add(title);
 		const slot = view("x").style({ gap: "8px" }).addInto(this.el);
@@ -274,6 +273,10 @@ class functionBlock {
 	}
 }
 
+async function sleep(T: number) {
+	return new Promise((resolve) => setTimeout(resolve, T));
+}
+
 function renderFile(rawfile: FileData) {
 	const file = structuredClone(rawfile);
 	toolsBar.add([
@@ -288,7 +291,14 @@ function renderFile(rawfile: FileData) {
 
 function renderEditor(rawfile: FileData) {
 	const file = structuredClone(rawfile);
-	const xlangEnv = env();
+	const xlangEnv = env({
+		runInfo: (fName, frameId) => {
+			runInfo.add({ fName, frameId });
+		},
+		cache: { max: 1000 },
+	});
+	const runInfo = new Set<{ fName: string; frameId: string }>();
+	let runCancel = false;
 
 	const vp = { x: 0, y: 0 };
 
@@ -300,7 +310,7 @@ function renderEditor(rawfile: FileData) {
 		.addInto(xWarp);
 	baseEditor.add([pageSelect, xWarp]);
 	const baseEditorRoot = view().style({ position: "absolute" }).addInto(viewer);
-	// const ioSetter = view().style({ width: "200px" }).addInto(xWarp);
+	const ioSetter = view("y").style({ width: "200px" }).addInto(xWarp);
 
 	viewer.on("wheel", (e) => {
 		e.preventDefault();
@@ -322,9 +332,9 @@ function renderEditor(rawfile: FileData) {
 		functionMap.set(name, fun);
 	}
 
-	for (const [pageId, page] of Object.entries(file.data)) {
+	for (const [_, page] of Object.entries(file.data)) {
 		pageSelect.add(
-			txt(pageId).on("click", () => {
+			txt(page.functionId).on("click", () => {
 				baseEditorRoot.clear();
 
 				const linker = view()
@@ -417,6 +427,57 @@ function renderEditor(rawfile: FileData) {
 						),
 					);
 				};
+
+				ioSetter.clear();
+				const inputArea = textarea()
+					.style({ height: "150px" })
+					.addInto(ioSetter);
+				button("运行")
+					.addInto(ioSetter)
+					.on("click", () => {
+						runInfo.clear();
+						const input = JSON.parse(inputArea.gv);
+						const r = xlangEnv.run(page.code, input);
+						outputArea.sv(JSON.stringify(r, null, 2));
+					});
+				const outputArea = textarea()
+					.style({ height: "150px" })
+					.addInto(ioSetter);
+				button("动画")
+					.addInto(ioSetter)
+					.on("click", async () => {
+						runCancel = false;
+						const r = Array.from(runInfo).filter(
+							(i) => i.fName === page.functionId,
+						);
+						// todo 拿到不同函数帧信息（比如递归时可区分层级），节点io数据，等待的节点
+						let count = 0;
+						for (const info of r) {
+							const block = thisViewBlock.get(info.frameId);
+							if (block) {
+								block.el.el.classList.add(editorBlockHighlightClass);
+							}
+							count++;
+							animateRunProgress.sv(
+								`动画进度: ${((count / r.length) * 100).toFixed(2)}%`,
+							);
+							if (runCancel) break;
+							await sleep(30);
+							if (block) {
+								block.el.el.classList.remove(editorBlockHighlightClass);
+							}
+						}
+					});
+				const animateRunProgress = txt().addInto(ioSetter);
+				button("取消动画")
+					.addInto(ioSetter)
+					.on("click", () => {
+						runCancel = true;
+						animateRunProgress.sv("");
+						for (const i of thisViewBlock.values()) {
+							i.el.el.classList.remove(editorBlockHighlightClass);
+						}
+					});
 			}),
 		);
 	}
@@ -554,10 +615,6 @@ function renderMagic(rawfile: FileData) {
 			const r = xlangEnv.run(file.data.main.code, x);
 
 			outputArea.sv(JSON.stringify(r, null, 2));
-
-			async function sleep(T: number) {
-				return new Promise((resolve) => setTimeout(resolve, T));
-			}
 
 			for (const gArr of glyphMap.values()) {
 				for (const g of gArr.els) {
@@ -1032,6 +1089,22 @@ addStyle({
 		backgroundColor: "transparent",
 	},
 });
+
+const editorBlockBaseClass = addClass(
+	{
+		borderRadius: "4px",
+		padding: "4px",
+		border: "1px solid #ccc",
+	},
+	{},
+);
+
+const editorBlockHighlightClass = addClass(
+	{
+		background: "#cfc",
+	},
+	{},
+);
 
 const magicHighLightBaseClass = addClass(
 	{},
