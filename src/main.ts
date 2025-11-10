@@ -1313,6 +1313,7 @@ function env(op?: {
 					return run(x, args, name);
 				},
 			};
+			return funs[name];
 		},
 		updateFunctionName: (oldName: string, newName: string) => {
 			if (cacheFunName?.has(oldName)) {

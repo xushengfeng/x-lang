@@ -546,12 +546,13 @@ function renderEditor(rawfile: FileData) {
 	const vp = { x: 0, y: 0 };
 
 	baseEditor.clear();
-	const pageSelect = view();
+	const pageSelectP = view("x");
+	const pageSelect = view("x").style({ gap: "4px" }).addInto(pageSelectP);
 	const xWarp = view("x").style({ flexGrow: 1 });
 	const viewer = view("x")
 		.style({ flexGrow: 1, position: "relative", overflow: "hidden" })
 		.addInto(xWarp);
-	baseEditor.add([pageSelect, xWarp]);
+	baseEditor.add([pageSelectP, xWarp]);
 	const baseEditorRoot = view().style({ position: "absolute" }).addInto(viewer);
 	const ioSetter = view("y").style({ width: "200px" }).addInto(xWarp);
 
@@ -581,6 +582,29 @@ function renderEditor(rawfile: FileData) {
 		});
 		pageSelect.add(selectItem);
 	}
+	pageSelectP.add(
+		button("+").on("click", () => {
+			const newPageId = `page_${Date.now()}`;
+			const newFunctionId = `function_${Date.now()}`;
+			const newPage: DataItem = {
+				functionId: newFunctionId,
+				code: {
+					input: [],
+					output: [],
+					data: {},
+				},
+				geo: {},
+			};
+			file.data[newPageId] = newPage;
+			const f = xlangEnv.addFunction(newFunctionId, newPage.code);
+			functionMap.set(newFunctionId, f);
+			const selectItem = txt(newPage.functionId).on("click", () => {
+				render(newPage, selectItem);
+			});
+			pageSelect.add(selectItem);
+			render(newPage, selectItem);
+		}),
+	);
 	render(file.data.main, view());
 	function render(page: DataItem, selectItem: ElType<HTMLElement>) {
 		baseEditorRoot.clear();
@@ -782,12 +806,13 @@ function renderEditor(rawfile: FileData) {
 		button("+")
 			.addInto(inputSetter)
 			.on("click", () => {
-				addInputSetterItem({
+				tmpInput.push({
 					name: "",
 					type: { type: "any" },
 					mapKey: { id: "", key: "" },
 					uid: crypto.randomUUID(),
 				});
+				addInputSetterItem(tmpInput[0]);
 			});
 
 		const outputSetter = view("y").addInto(ioSetter);
@@ -795,12 +820,13 @@ function renderEditor(rawfile: FileData) {
 		button("+")
 			.addInto(outputSetter)
 			.on("click", () => {
-				addOutputSetterItem({
+				tmpOutput.push({
 					name: "",
 					type: { type: "any" },
 					mapKey: { id: "", key: "" },
 					uid: crypto.randomUUID(),
 				});
+				addOutputSetterItem(tmpOutput[0]);
 			});
 
 		let tmpInput = page.code.input.map((i) => ({
@@ -884,6 +910,7 @@ function renderEditor(rawfile: FileData) {
 					});
 					fileData = structuredClone(file);
 					fileChange();
+					updateFunction();
 
 					updateInputX();
 				},
@@ -896,6 +923,7 @@ function renderEditor(rawfile: FileData) {
 					});
 					fileData = structuredClone(file);
 					fileChange();
+					updateFunction();
 				},
 			);
 			inputSetterList.add(el);
@@ -912,6 +940,7 @@ function renderEditor(rawfile: FileData) {
 					});
 					fileData = structuredClone(file);
 					fileChange();
+					updateFunction();
 				},
 				"o",
 				() => {
@@ -922,6 +951,7 @@ function renderEditor(rawfile: FileData) {
 					});
 					fileData = structuredClone(file);
 					fileChange();
+					updateFunction();
 				},
 			);
 			outputSetterList.add(el);
@@ -931,6 +961,10 @@ function renderEditor(rawfile: FileData) {
 		}
 		for (const o of tmpOutput) {
 			addOutputSetterItem(o);
+		}
+		function updateFunction() {
+			const f = xlangEnv.addFunction(page.functionId, page.code);
+			functionMap.set(page.functionId, f);
 		}
 
 		function updateInputX() {
