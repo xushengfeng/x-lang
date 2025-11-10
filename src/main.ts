@@ -1314,5 +1314,20 @@ function env(op?: {
 				},
 			};
 		},
+		updateFunctionName: (oldName: string, newName: string) => {
+			if (cacheFunName?.has(oldName)) {
+				cacheFunName.delete(oldName);
+				cacheFunName.add(newName);
+			}
+			const fun = funs[oldName];
+			if (fun) {
+				funs[newName] = fun;
+				delete funs[oldName];
+			}
+		},
+		removeFunction: (name: string) => {
+			cacheFunName?.delete(name);
+			delete funs[name];
+		},
 	};
 }
