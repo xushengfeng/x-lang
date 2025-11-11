@@ -618,7 +618,7 @@ function renderEditor(rawfile: FileData) {
 		.addInto(xWarp);
 	baseEditor.add([pageSelectP, xWarp]);
 	const baseEditorRoot = view().style({ position: "absolute" }).addInto(viewer);
-	const ioSetter = view("y").style({ width: "200px" }).addInto(xWarp);
+	const ioSetter = view("y").style({ width: "120px" }).addInto(xWarp);
 
 	viewer.on("wheel", (e) => {
 		e.preventDefault();
@@ -953,7 +953,7 @@ function renderEditor(rawfile: FileData) {
 					}
 				});
 			const nameTxt = input()
-				.style({ maxWidth: "80px" })
+				.style({ maxWidth: "50px" })
 				.addInto(itemView)
 				.sv(data.name)
 				.on("change", () => {
@@ -961,7 +961,7 @@ function renderEditor(rawfile: FileData) {
 					cb(data);
 				});
 			const typeEl = input()
-				.style({ maxWidth: "80px" })
+				.style({ maxWidth: "50px" })
 				.addInto(itemView)
 				.sv(JSON.stringify(data.type.type))
 				.on("change", () => {
@@ -1376,7 +1376,13 @@ function renderMagic(rawfile: FileData) {
 
 			const r = xlangEnv.run(file.data.main.code, x);
 
-			outputArea.sv(JSON.stringify(r, null, 2));
+			outputArea.sv(
+				JSON.stringify(r, null, 2)
+					.split("\n")
+					.slice(1, -1)
+					.map((line) => line.trim())
+					.join(""),
+			);
 
 			for (const gArr of glyphMap.values()) {
 				for (const g of gArr.els) {
@@ -1443,7 +1449,10 @@ function renderMagic(rawfile: FileData) {
 				}
 			}
 		});
-	const outputArea = textarea().addInto(sideBar).attr({ readOnly: true });
+	const outputArea = textarea()
+		.addInto(sideBar)
+		.attr({ readOnly: true })
+		.style({ width: "120px" });
 	const animateRunProgress = txt().addInto(view("x").addInto(sideBar));
 	button("取消魔法进行")
 		.on("click", () => {
