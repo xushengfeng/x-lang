@@ -1,4 +1,5 @@
 import {
+	a,
 	addClass,
 	addStyle,
 	button,
@@ -2392,13 +2393,15 @@ const mainDiv = view("y")
 	})
 	.addInto();
 
-const toolsBar = view().addInto(mainDiv);
+const toolsBar = view("x").style({ gap: "4px" }).addInto(mainDiv);
 
 button("导出")
 	.on("click", () => {
 		console.log(fileData);
 	})
 	.addInto(toolsBar);
+
+a("https://github.com/xushengfeng/x-lang").add("项目主页").addInto(toolsBar);
 
 const viewer = view()
 	.style({ flexGrow: 1, overflow: "hidden" })
