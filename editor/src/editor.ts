@@ -1247,6 +1247,13 @@ function renderMagic(rawfile: FileData) {
 			[3, 7],
 		],
 		newFun: [[1, 7]],
+		self: [
+			[6, 9],
+			[9, 7],
+			[7, 3],
+			[3, 1],
+			[1, 4],
+		],
 		ioBase: [
 			[4, 7],
 			[3, 6],
@@ -2043,7 +2050,10 @@ function renderMagic(rawfile: FileData) {
 				console.warn(`${f.functionName} magic font unfind`);
 			}
 			sPage.push({
-				font: x[f.functionName] ?? fontMap.undefined,
+				font:
+					f.functionName === page.functionId
+						? fontMap.self
+						: (x[f.functionName] ?? fontMap.undefined),
 				exData: name,
 				exType: "f",
 				funcName: f.functionName,
