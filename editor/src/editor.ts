@@ -1408,7 +1408,7 @@ function renderMagic(rawfile: FileData) {
 		.addInto(sideBar);
 
 	button("符文编辑器")
-		.on("click", () => {
+		.on("click", async () => {
 			const xel = view("y")
 				.style({
 					position: "fixed",
@@ -1441,29 +1441,50 @@ function renderMagic(rawfile: FileData) {
 					updateF();
 				});
 			function updateF() {
-				Array.from(bhx.el.children).forEach((child, idx) => {
-					if (bhS.has(idx)) {
-						(child as HTMLElement).style.backgroundColor = "#222";
+				for (const [i, el] of elMap) {
+					if (bhS.has(i)) {
+						el.style({ backgroundColor: "#555" });
 					} else {
-						(child as HTMLElement).style.backgroundColor = "transparent";
+						el.style({ backgroundColor: "transparent" });
 					}
-				});
+				}
 				vvv
 					.clear()
 					.el.appendChild(createFontRect(48, FontX2Font(Array.from(bhS))));
+				const p = new Set<FontZb>();
+				for (const pp of FontX2Font(Array.from(bhS))) {
+					for (const b of pp) {
+						p.add(b);
+					}
+				}
+				vvv.el.appendChild(
+					createFontRect(
+						48,
+						Array.from(p).map((b) => [b]),
+					),
+				);
+				vvv.add(txt(`笔画数: ${bhS.size} 点数: ${p.size}`));
+
 				const ff = genFontId(Array.from(bhS).map((i) => i));
-				for (const [n, s] of Object.entries(data.dt)) {
+
+				for (const [_, s] of data.dt[String(p.size)]) {
 					if (s.has(ff)) {
 						const index = Array.from(s).indexOf(ff);
-						vvv.add(txt(`${n} ${Math.floor(index / pageSize) + 1}`));
+						vvv.add(txt(`${Math.floor(index / pageSize) + 1}`));
 						break;
 					}
 				}
 			}
+			const bhMap: number[] = [
+				15, 19, 21, 7, 0, 1, 2, 6, 3, 4, 5, 13, 12, 8, 11, 14, 27, 25, 22, 24,
+				10, 18, 26, 16, 20, 17, 23, 9,
+			];
+			const elMap = new Map<number, ElType<HTMLElement>>();
 			const bhx = view("x")
 				.add(
-					magicFontBaseBh.map((bh, idx) => {
-						const el = view();
+					bhMap.map((idx) => {
+						const bh = magicFontBaseBh[idx];
+						const el = view().style({ border: "1px solid #555" });
 						el.el.appendChild(createFontRect(24, [bh]));
 						el.on("click", () => {
 							if (bhS.has(idx)) {
@@ -1474,58 +1495,81 @@ function renderMagic(rawfile: FileData) {
 							updateF();
 							bhIp.sv(Array.from(bhS));
 						});
+						elMap.set(idx, el);
 						return el;
 					}),
 				)
 				.addInto(xel);
-			const vvv = view().addInto(xel);
+			const vvv = view("x").style({ gap: "8px" }).addInto(xel);
 
-			const data = genFonts();
+			const data = await genFonts();
+			console.log(data);
 
-			const pageSize = 400;
-			const xxx = view("x").addInto(xel).style({ gap: "4px" });
+			const pageSize = 1000;
+			const pointCount = view("x").addInto(xel).style({ gap: "4px" });
+			function fost(fid: string) {
+				const el = view()
+					.style({ width: "48px", height: "48px" })
+					.on("click", () => {
+						bhS.clear();
+						for (const x of fontId2FontX(fid)) {
+							bhS.add(x);
+						}
+						bhIp.sv(Array.from(bhS));
+						updateF();
+					})
+					.addInto(v);
+				el.el.appendChild(createFontRect(48, FontX2Font(fontId2FontX(fid))));
+				return el;
+			}
 			for (const [n, f] of Object.entries(data.dt)) {
-				xxx.add(
+				pointCount.add(
 					txt(n).on("click", () => {
-						const ff = Array.from(f);
-						const pages = Math.ceil(f.size / pageSize);
-						s.clear();
-						v.clear();
-						for (let p = 0; p < pages; p++) {
-							s.add(
-								txt(`页${p + 1}`)
-									.style({ flexShrink: 0 })
-									.on("click", () => {
-										v.clear();
-
-										const start = p * pageSize;
-										const end = Math.min(f.size, (p + 1) * pageSize);
-										for (let i = start; i < end; i++) {
-											const el = view()
+						pointStyle.clear();
+						for (const [p, c] of f) {
+							if (c.size === 0) continue;
+							const ps = p.split("").map((i) => [Number(i) as FontZb]);
+							const el = view()
+								.addInto(pointStyle)
+								.style({ border: "1px solid #555", padding: "2px" });
+							el.el.appendChild(createFontRect(24, ps));
+							el.on("click", () => {
+								pageSplit.clear();
+								v.clear();
+								if (c.size > 1000) {
+									const ff = Array.from(c);
+									const pages = Math.ceil(ff.length / pageSize);
+									for (let p = 0; p < pages; p++) {
+										pageSplit.add(
+											txt(`页${p + 1}`)
+												.style({ flexShrink: 0 })
 												.on("click", () => {
-													bhS.clear();
-													for (const x of fontId2FontX(ff[i])) {
-														bhS.add(x);
+													v.clear();
+
+													const start = p * pageSize;
+													const end = Math.min(c.size, (p + 1) * pageSize);
+													for (let i = start; i < end; i++) {
+														fost(ff[i]).addInto(v);
 													}
-													bhIp.sv(Array.from(bhS));
-													updateF();
-												})
-												.addInto(v);
-											el.el.appendChild(
-												createFontRect(48, FontX2Font(fontId2FontX(ff[i]))),
-											);
-										}
-									}),
-							);
+												}),
+										);
+									}
+								} else {
+									v.add(Array.from(c).map((i) => fost(i)));
+								}
+							});
 						}
 					}),
 				);
 			}
-			const s = view("x")
+			const pointStyle = view("x")
+				.style({ gap: "8px", overflow: "scroll", flexShrink: 0 })
+				.addInto(xel);
+			const pageSplit = view("x")
 				.style({ gap: "4px", overflow: "scroll", flexShrink: 0 })
 				.addInto(xel);
 			const v = view("x", "wrap")
-				.style({ overflowY: "scroll", flexGrow: 1 })
+				.style({ overflowY: "scroll", flexGrow: 1, alignContent: "flex-start" })
 				.addInto(xel);
 		})
 		.addInto(sideBar);
@@ -2054,11 +2098,12 @@ function renderMagic(rawfile: FileData) {
 		}
 	}
 
-	function genFonts() {
+	async function genFonts() {
 		// 外围是3*3
 		const magicFontPoints: Record<number, Set<string>> = {
 			2: new Set(["19", "37"]),
 			3: new Set(["138", "349", "279", "167", "168", "348", "249", "267"]),
+			4: new Set(["2468"]),
 		};
 
 		for (let i = 3; i <= 9; i++) {
@@ -2074,7 +2119,9 @@ function renderMagic(rawfile: FileData) {
 			}
 		}
 
-		function findCanonicalStrokeCover(targetPoints: Set<number>): number[][] {
+		console.log(magicFontPoints);
+
+		async function findCanonicalStrokeCover(targetPoints: Set<number>) {
 			const result: number[][] = [];
 
 			// 找到所有端点都是目标点的笔画
@@ -2100,6 +2147,37 @@ function renderMagic(rawfile: FileData) {
 				targetPoints,
 				result,
 			);
+
+			await sleep(0);
+
+			// 在基础解的基础上继续生成变种：对每个已找到的解，
+			// 逐步将剩余的笔画加入，直到笔画用完，
+			// 并将所有超集（去重）加入结果
+			const seen = new Set<string>();
+			for (const r of result) {
+				seen.add(genFontId(r));
+			}
+			const expanded: number[][] = [];
+			const queue: number[][] = result.map((r) => [...r]);
+			if (targetPoints.size <= 5)
+				while (queue.length > 0) {
+					const base = queue.shift();
+					if (!base) continue;
+					// 计算剩余可加入的笔画
+					const remaining = validStrokes.filter((s) => !base.includes(s));
+					for (const s of remaining) {
+						const ns = [...base, s].sort((a, b) => a - b);
+						const id = genFontId(ns);
+						if (!seen.has(id)) {
+							seen.add(id);
+							expanded.push(ns);
+							queue.push(ns);
+						}
+					}
+				}
+
+			// 把扩展结果合并回最终结果
+			for (const e of expanded) result.push(e);
 
 			return result;
 		}
@@ -2199,15 +2277,16 @@ function renderMagic(rawfile: FileData) {
 			return count;
 		}
 
-		const dt: Record<string, Set<string>> = {};
+		const dt: Record<string, Map<string, Set<string>>> = {};
 
 		for (const [n, s] of Object.entries(magicFontPoints)) {
 			for (const ss of s) {
 				const p = new Set(ss.split("").map((i) => Number(i)));
-				if (!dt[n]) dt[n] = new Set();
-				const r = findCanonicalStrokeCover(p);
+				if (!dt[n]) dt[n] = new Map();
+				if (!dt[n].has(ss)) dt[n].set(ss, new Set());
+				const r = await findCanonicalStrokeCover(p);
 				for (const rr of r) {
-					dt[n].add(genFontId(rr));
+					dt[n].get(ss)?.add(genFontId(rr));
 				}
 			}
 		}
