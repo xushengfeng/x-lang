@@ -1216,16 +1216,6 @@ function renderMagic(rawfile: FileData) {
 		x[k] = FontX2Font(v);
 	}
 
-	let magicId = 0;
-	for (const [pageId, page] of Object.entries(file.data)) {
-		if (pageId === "main") continue;
-		x[page.functionId] = [
-			[1, 7],
-			...number2binFont(magicId, [2, 5, 8, 3, 6, 9]),
-		];
-		magicId++;
-	}
-
 	const fontMap = {
 		blank: [
 			[7, 9],
@@ -1239,6 +1229,7 @@ function renderMagic(rawfile: FileData) {
 			[1, 9],
 			[3, 7],
 		],
+		newFun: [[1, 7]],
 		ioBase: [
 			[4, 7],
 			[3, 6],
@@ -1251,12 +1242,22 @@ function renderMagic(rawfile: FileData) {
 		],
 	} satisfies Record<string, font>;
 
-	function number2binFont(data: number, index: FontZb[]): font {
-		const x: font = [];
-		const b = data.toString(2);
+	let magicId = 0;
+	for (const [pageId, page] of Object.entries(file.data)) {
+		if (pageId === "main") continue;
+		x[page.functionId] = idFont(fontMap.newFun, magicId);
+		magicId++;
+	}
+
+	function idFont(baseFont: font, id: number) {
+		const x: font = [...baseFont];
+		const restP = magicFontBaseX.filter(
+			(i) => !baseFont.find((x) => x.includes(i)),
+		);
+		const b = id.toString(2);
 		for (let i = b.length - 1; i >= 0; i--) {
 			if (b[i] === "1") {
-				x.push([index[b.length - 1 - i]]);
+				x.push([restP[b.length - 1 - i]]);
 			}
 		}
 		return x;
@@ -1305,12 +1306,6 @@ function renderMagic(rawfile: FileData) {
 			}
 			x.push(f);
 		}
-		return x;
-	}
-
-	function io2font(index: number): font {
-		const x: font = [...fontMap.ioBase];
-		x.push(...number2binFont(index, [1, 2, 5, 8, 9]));
 		return x;
 	}
 
@@ -1617,7 +1612,7 @@ function renderMagic(rawfile: FileData) {
 		})
 		.addInto(sideBar);
 
-	button("函数符文对应")
+	button("符文对应")
 		.on("click", () => {
 			const xel = view("y")
 				.style({
@@ -1637,6 +1632,15 @@ function renderMagic(rawfile: FileData) {
 				})
 				.addInto(xel);
 			const l = view("y").style({ overflow: "scroll" }).addInto(xel);
+
+			for (const [n, v] of Object.entries(fontMap)) {
+				const el = view("x");
+				el.add(txt(n));
+				const svg = createFontRect(24, v);
+				el.el.appendChild(svg);
+				l.add(el);
+			}
+
 			for (const f of functionMap.keys()) {
 				const el = view("x");
 				el.add(txt(f));
@@ -2022,7 +2026,7 @@ function renderMagic(rawfile: FileData) {
 			if (!fun) continue;
 			for (let i = 0; i < fun.input.length; i++) {
 				sPage.push({
-					font: io2font(i),
+					font: idFont(fontMap.ioBase, i),
 					exType: "i",
 					exData: `${name}-i-${fun.input[i].name}`,
 				});
@@ -2034,10 +2038,7 @@ function renderMagic(rawfile: FileData) {
 					}
 					exData.push(canT ? toDataView(d) : toDataView(0));
 					sPage.push({
-						font: [
-							...fontMap.exDataBase,
-							...number2binFont(exData.length - 1, [4, 5, 6, 9]),
-						],
+						font: idFont(fontMap.exDataBase, exData.length - 1),
 						exType: "f",
 						exData: `${name}-i-default-${fun.input[i].name}`,
 					});
@@ -2045,7 +2046,7 @@ function renderMagic(rawfile: FileData) {
 			}
 			for (let i = 0; i < fun.output.length; i++) {
 				sPage.push({
-					font: io2font(i),
+					font: idFont(fontMap.ioBase, i),
 					exType: "o",
 					exData: `${name}-o-${fun.output[i].name}`,
 				});
@@ -2060,7 +2061,7 @@ function renderMagic(rawfile: FileData) {
 		}
 		for (const [i, d] of exData.entries()) {
 			sPage.push({
-				font: [...fontMap.exDataBase, ...number2binFont(i, [4, 5, 6, 9])],
+				font: idFont(fontMap.exDataBase, i),
 				exType: "f",
 				exData: "",
 			});
