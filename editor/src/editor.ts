@@ -630,6 +630,22 @@ function renderEditor(rawfile: FileData) {
 		});
 	});
 
+	trackPoint(viewer, {
+		start: (e) => {
+			if (e.target === viewer.el) {
+				return { x: vp.x, y: vp.y };
+			}
+		},
+		ing: (p) => {
+			vp.x = p.x;
+			vp.y = p.y;
+			baseEditorRoot.style({
+				left: `${vp.x}px`,
+				top: `${vp.y}px`,
+			});
+		},
+	});
+
 	for (const [pageId, page] of Object.entries(file.data)) {
 		if (pageId === "main") continue;
 		xlangEnv.addFunction(page.functionId, page.code);
@@ -2394,6 +2410,8 @@ const mainDiv = view("y")
 	.addInto();
 
 const toolsBar = view("x").style({ gap: "4px" }).addInto(mainDiv);
+
+a(location.origin).add("开始页").addInto(toolsBar);
 
 button("导出")
 	.on("click", () => {
