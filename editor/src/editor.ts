@@ -1127,6 +1127,45 @@ function renderMagic(rawfile: FileData) {
 	type FontBh = FontZb[];
 	// 字形
 	type font = FontBh[];
+	type FontX = number[]; // 下面基本笔画索引
+
+	const magicFontBaseX: FontZb[] = [1, 2, 3, 4, 5, 6, 7, 8, 9];
+	// 基本笔画
+	const magicFontBaseBh: FontBh[] = [];
+	const magicFontBaseBhIgnore = [
+		[1, 3],
+		[4, 6],
+		[7, 9],
+		[1, 7],
+		[2, 8],
+		[3, 9],
+		[1, 9],
+		[3, 7],
+	];
+	for (let i = 0; i < magicFontBaseX.length; i++) {
+		for (let j = i + 1; j < magicFontBaseX.length; j++) {
+			if (
+				magicFontBaseBhIgnore.some(
+					(k) => k[0] === magicFontBaseX[i] && k[1] === magicFontBaseX[j],
+				)
+			)
+				continue;
+			magicFontBaseBh.push([magicFontBaseX[i], magicFontBaseX[j]]);
+		}
+	}
+	function genFontId(indexs: FontX) {
+		return indexs.sort((a, b) => a - b).join("-");
+	}
+	function fontId2FontX(id: string): FontX {
+		return id.split("-").map((i) => Number(i));
+	}
+	function FontX2Font(f: FontX): font {
+		const x: font = [];
+		for (const bi of f) {
+			x.push(magicFontBaseBh[bi]);
+		}
+		return x;
+	}
 
 	// todo 自动化生成
 	const x: Record<string, font> = {
@@ -1368,6 +1407,129 @@ function renderMagic(rawfile: FileData) {
 		})
 		.addInto(sideBar);
 
+	button("符文编辑器")
+		.on("click", () => {
+			const xel = view("y")
+				.style({
+					position: "fixed",
+					width: "100vw",
+					height: "100vh",
+					top: 0,
+					left: 0,
+					zIndex: 999,
+					color: "white",
+					background: "#000",
+				})
+				.addInto();
+			button("关闭")
+				.on("click", () => {
+					xel.remove();
+				})
+				.addInto(xel);
+
+			const bhS = new Set<number>();
+			const bhIp = input()
+				.addInto(xel)
+				.bindGet((el) => JSON.parse(el.value) as number[])
+				.bindSet((v: number[], el) => {
+					el.value = JSON.stringify(v.sort((a, b) => a - b));
+				})
+				.sv([])
+				.on("change", () => {
+					bhS.clear();
+					for (const i of bhIp.gv) bhS.add(i);
+					updateF();
+				});
+			function updateF() {
+				Array.from(bhx.el.children).forEach((child, idx) => {
+					if (bhS.has(idx)) {
+						(child as HTMLElement).style.backgroundColor = "#222";
+					} else {
+						(child as HTMLElement).style.backgroundColor = "transparent";
+					}
+				});
+				vvv
+					.clear()
+					.el.appendChild(createFontRect(48, FontX2Font(Array.from(bhS))));
+				const ff = genFontId(Array.from(bhS).map((i) => i));
+				for (const [n, s] of Object.entries(data.dt)) {
+					if (s.has(ff)) {
+						const index = Array.from(s).indexOf(ff);
+						vvv.add(txt(`${n} ${Math.floor(index / pageSize) + 1}`));
+						break;
+					}
+				}
+			}
+			const bhx = view("x")
+				.add(
+					magicFontBaseBh.map((bh, idx) => {
+						const el = view();
+						el.el.appendChild(createFontRect(24, [bh]));
+						el.on("click", () => {
+							if (bhS.has(idx)) {
+								bhS.delete(idx);
+							} else {
+								bhS.add(idx);
+							}
+							updateF();
+							bhIp.sv(Array.from(bhS));
+						});
+						return el;
+					}),
+				)
+				.addInto(xel);
+			const vvv = view().addInto(xel);
+
+			const data = genFonts();
+
+			const pageSize = 400;
+			const xxx = view("x").addInto(xel).style({ gap: "4px" });
+			for (const [n, f] of Object.entries(data.dt)) {
+				xxx.add(
+					txt(n).on("click", () => {
+						const ff = Array.from(f);
+						const pages = Math.ceil(f.size / pageSize);
+						s.clear();
+						v.clear();
+						for (let p = 0; p < pages; p++) {
+							s.add(
+								txt(`页${p + 1}`)
+									.style({ flexShrink: 0 })
+									.on("click", () => {
+										v.clear();
+
+										const start = p * pageSize;
+										const end = Math.min(f.size, (p + 1) * pageSize);
+										for (let i = start; i < end; i++) {
+											const el = view()
+												.on("click", () => {
+													bhS.clear();
+													for (const x of fontId2FontX(ff[i])) {
+														bhS.add(x);
+													}
+													bhIp.sv(Array.from(bhS));
+													updateF();
+												})
+												.addInto(v);
+											el.el.appendChild(
+												createFontRect(48, FontX2Font(fontId2FontX(ff[i]))),
+											);
+										}
+									}),
+							);
+						}
+					}),
+				);
+			}
+			const s = view("x")
+				.style({ gap: "4px", overflow: "scroll", flexShrink: 0 })
+				.addInto(xel);
+			const v = view("x", "wrap")
+				.style({ overflowY: "scroll", flexGrow: 1 })
+				.addInto(xel);
+		})
+		.addInto(sideBar);
+
 	const pages = Object.entries(file.data);
 	if (pages.length === 0) return;
 
@@ -1471,6 +1633,68 @@ function renderMagic(rawfile: FileData) {
 
 		svg.appendChild(g);
 		return g;
+	}
+	function createFontRect(width: number, font: font): SVGSVGElement {
+		const svg = document.createElementNS(svgNS, "svg");
+		const height = width;
+		svg.setAttribute("width", String(width));
+		svg.setAttribute("height", String(height));
+		svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
+		svg.style.display = "block";
+
+		// 3x3 网格坐标映射
+		const posMap: Record<number, [number, number]> = {
+			7: [0, 2],
+			8: [1, 2],
+			9: [2, 2],
+			4: [0, 1],
+			5: [1, 1],
+			6: [2, 1],
+			1: [0, 0],
+			2: [1, 0],
+			3: [2, 0],
+		};
+
+		const cellW = width / 3;
+		const cellH = height / 3;
+		const strokeW = Math.max(1, Math.round(width / 24));
+		const dotR = Math.max(1, Math.round(strokeW / 2));
+
+		function gridToXY(n: number) {
+			const [col, row] = posMap[n];
+			const x = (col + 0.5) * cellW;
+			const y = (2 - row + 0.5) * cellH; // 行从下到上：0,1,2
+			return [x, y] as const;
+		}
+
+		for (const stroke of font) {
+			if (!stroke || stroke.length === 0) continue;
+			if (stroke.length === 1) {
+				const [x, y] = gridToXY(stroke[0]);
+				const circle = document.createElementNS(svgNS, "circle");
+				circle.setAttribute("cx", String(x));
+				circle.setAttribute("cy", String(y));
+				circle.setAttribute("r", String(dotR));
+				circle.setAttribute("fill", mainColor);
+				svg.appendChild(circle);
+				continue;
+			}
+			const path = document.createElementNS(svgNS, "path");
+			const d: string[] = [];
+			for (let i = 0; i < stroke.length; i++) {
+				const [x, y] = gridToXY(stroke[i]);
+				d.push(i === 0 ? `M ${x} ${y}` : `L ${x} ${y}`);
+			}
+			path.setAttribute("d", d.join(" "));
+			path.setAttribute("fill", "none");
+			path.setAttribute("stroke", mainColor);
+			path.setAttribute("stroke-width", String(strokeW));
+			path.setAttribute("stroke-linecap", "round");
+			path.setAttribute("stroke-linejoin", "round");
+			svg.appendChild(path);
+		}
+
+		return svg;
 	}
 	function renderRing(
 		centerX: number,
@@ -1828,6 +2052,171 @@ function renderMagic(rawfile: FileData) {
 				linkGroup.appendChild(path);
 			}
 		}
+	}
+
+	function genFonts() {
+		// 外围是3*3
+		const magicFontPoints: Record<number, Set<string>> = {
+			2: new Set(["19", "37"]),
+			3: new Set(["138", "349", "279", "167", "168", "348", "249", "267"]),
+		};
+
+		for (let i = 3; i <= 9; i++) {
+			const a = magicFontBaseX;
+			for (const l of magicFontPoints[i - 1]) {
+				const ll = l.split("").map((i) => Number(i));
+				const rest = a.filter((n) => !ll.includes(n));
+				for (const r of rest) {
+					const nl = [...ll, r].sort((a, b) => a - b).join("");
+					if (!magicFontPoints[i]) magicFontPoints[i] = new Set();
+					magicFontPoints[i].add(nl);
+				}
+			}
+		}
+
+		function findCanonicalStrokeCover(targetPoints: Set<number>): number[][] {
+			const result: number[][] = [];
+
+			// 找到所有端点都是目标点的笔画
+			const validStrokes: number[] = [];
+
+			for (let i = 0; i < magicFontBaseBh.length; i++) {
+				const stroke = magicFontBaseBh[i];
+				// 笔画的两个端点都必须在目标点集合中
+				if (targetPoints.has(stroke[0]) && targetPoints.has(stroke[1])) {
+					validStrokes.push(i);
+				}
+			}
+
+			// 使用回溯法高效搜索最小覆盖
+			const coveredPoints = new Set<number>();
+			const currentSolution: number[] = [];
+
+			backtrack(
+				0,
+				coveredPoints,
+				currentSolution,
+				validStrokes,
+				targetPoints,
+				result,
+			);
+
+			return result;
+		}
+
+		function backtrack(
+			startIndex: number,
+			coveredPoints: Set<number>,
+			currentSolution: number[],
+			validStrokes: number[],
+			targetPoints: Set<number>,
+			result: number[][],
+		): void {
+			// 如果已经覆盖所有目标点，保存当前解
+			if (isAllCovered(coveredPoints, targetPoints)) {
+				result.push([...currentSolution]);
+				return;
+			}
+
+			// 如果已经遍历完所有笔画，返回
+			if (startIndex >= validStrokes.length) {
+				return;
+			}
+
+			// 剪枝：如果剩余笔画不足以覆盖未覆盖的点，提前返回
+			const uncoveredCount = countUncoveredPoints(coveredPoints, targetPoints);
+			const remainingStrokes = validStrokes.length - startIndex;
+			if (remainingStrokes < Math.ceil(uncoveredCount / 2)) {
+				return;
+			}
+
+			for (let i = startIndex; i < validStrokes.length; i++) {
+				const strokeIndex = validStrokes[i];
+				const stroke = magicFontBaseBh[strokeIndex];
+
+				// 计算这个笔画能覆盖的新点
+				const newPoints: number[] = [];
+				if (!coveredPoints.has(stroke[0])) newPoints.push(stroke[0]);
+				if (!coveredPoints.has(stroke[1])) newPoints.push(stroke[1]);
+
+				// 如果这个笔画没有覆盖新点，跳过（避免重复覆盖）
+				if (newPoints.length === 0) {
+					continue;
+				}
+
+				// 选择当前笔画
+				currentSolution.push(strokeIndex);
+				for (const point of newPoints) coveredPoints.add(point);
+
+				// 递归搜索
+				backtrack(
+					i + 1,
+					coveredPoints,
+					currentSolution,
+					validStrokes,
+					targetPoints,
+					result,
+				);
+
+				// 回溯
+				currentSolution.pop();
+				for (const point of newPoints) coveredPoints.delete(point);
+			}
+
+			// 也考虑不选择任何笔画的情况（继续搜索）
+			backtrack(
+				validStrokes.length,
+				coveredPoints,
+				currentSolution,
+				validStrokes,
+				targetPoints,
+				result,
+			);
+		}
+
+		function isAllCovered(
+			coveredPoints: Set<number>,
+			targetPoints: Set<number>,
+		): boolean {
+			for (const point of targetPoints) {
+				if (!coveredPoints.has(point)) {
+					return false;
+				}
+			}
+			return true;
+		}
+
+		function countUncoveredPoints(
+			coveredPoints: Set<number>,
+			targetPoints: Set<number>,
+		): number {
+			let count = 0;
+			for (const point of targetPoints) {
+				if (!coveredPoints.has(point)) {
+					count++;
+				}
+			}
+			return count;
+		}
+
+		const dt: Record<string, Set<string>> = {};
+
+		for (const [n, s] of Object.entries(magicFontPoints)) {
+			for (const ss of s) {
+				const p = new Set(ss.split("").map((i) => Number(i)));
+				if (!dt[n]) dt[n] = new Set();
+				const r = findCanonicalStrokeCover(p);
+				for (const rr of r) {
+					dt[n].add(genFontId(rr));
+				}
+			}
+		}
+
+		console.log(dt);
+
+		return {
+			dt: dt,
+		};
 	}
 }
 
