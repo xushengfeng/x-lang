@@ -1168,21 +1168,53 @@ function renderMagic(rawfile: FileData) {
 	}
 
 	// todo 自动化生成
-	const x: Record<string, font> = {
-		"value.num": [
-			[7, 9],
-			[8, 1],
-			[1, 3],
-		],
-		"math.lessEq": [[9, 4, 3]],
-		"ctrl.split": [
-			[4, 5],
-			[5, 9],
-			[5, 3],
-		],
-		"math.subtract": [[7], [1], [4, 6]],
-		"math.add": [[7], [1], [4, 6], [2, 8]],
+	const xBase: Record<string, FontX> = {
+		"value.num": [0, 5, 10, 26, 27],
+		"ctrl.split": [12, 15, 22],
+		"ctrl.if": [6, 11, 15, 17, 18],
+
+		"math.add": [6, 7, 21, 24],
+		"math.multiply": [6, 8, 15, 21],
+		"math.subtract": [8, 15, 17],
+		"math.divide": [6, 15, 19, 21, 24],
+		"math.power": [6, 7, 8, 15, 19, 24],
+		"math.log": [6, 7, 15, 17, 24],
+		"math.lg": [8, 15, 21, 24],
+		"math.log2": [6, 8, 15, 21, 24],
+		"math.ln": [7, 8, 17, 24],
+		"math.exp": [7, 8, 17, 19, 24],
+		"math.max": [3, 6, 23],
+		"math.min": [8, 11, 18],
+		"math.random": [0, 1, 3, 5, 12, 21, 25, 26],
+		"math.floor": [8, 17, 26],
+		"math.ceil": [6, 24, 27],
+		"math.round": [6, 8, 17, 24, 26, 27],
+		"math.eq": [0, 5, 15, 19, 26, 27],
+		"math.neq": [0, 8, 15, 17, 19, 27],
+		"math.less": [11, 18],
+		"math.greater": [3, 23],
+		"math.lessEq": [11, 18, 19],
+		"math.greaterEq": [3, 15, 23],
+		"str.split": [5, 6, 8, 14, 18],
+		"str.join": [5, 6, 8, 17, 25],
+		"str.repeat": [5, 6, 8, 18, 24],
+		"array.at": [1, 3, 13, 14],
+		"array.at2": [1, 4, 11, 13],
+		"array.slice": [1, 11, 13, 17, 24],
+		"array.sliceStart": [1, 11, 13, 17],
+		"array.sliceEnd": [1, 11, 13, 24],
+		"array.reverse": [1, 11, 14, 17, 24],
+		"array.sort": [3, 4, 11, 14, 17],
+		"array.map": [3, 4, 11, 14],
+		"array.reduce": [3, 11, 13, 14],
+		"array.filter": [3, 11, 13, 17],
+		"array.find": [1, 3, 4, 11, 14, 17],
+		"array.findIndex": [1, 3, 4, 11, 14, 24],
 	};
+	const x: Record<string, font> = {};
+	for (const [k, v] of Object.entries(xBase)) {
+		x[k] = FontX2Font(v);
+	}
 
 	let magicId = 0;
 	for (const [pageId, page] of Object.entries(file.data)) {
@@ -1440,6 +1472,17 @@ function renderMagic(rawfile: FileData) {
 					for (const i of bhIp.gv) bhS.add(i);
 					updateF();
 				});
+			xel.add(
+				button("随机").on("click", () => {
+					bhS.clear();
+					const n = magicFontBaseBh.flatMap((_, i) =>
+						Math.random() < 0.3 ? [i] : [],
+					);
+					for (const i of n) bhS.add(i);
+					bhIp.sv(Array.from(bhS));
+					updateF();
+				}),
+			);
 			function updateF() {
 				for (const [i, el] of elMap) {
 					if (bhS.has(i)) {
@@ -1480,7 +1523,7 @@ function renderMagic(rawfile: FileData) {
 				10, 18, 26, 16, 20, 17, 23, 9,
 			];
 			const elMap = new Map<number, ElType<HTMLElement>>();
-			const bhx = view("x")
+			view("x")
 				.add(
 					bhMap.map((idx) => {
 						const bh = magicFontBaseBh[idx];
@@ -1571,6 +1614,36 @@ function renderMagic(rawfile: FileData) {
 			const v = view("x", "wrap")
 				.style({ overflowY: "scroll", flexGrow: 1, alignContent: "flex-start" })
 				.addInto(xel);
+		})
+		.addInto(sideBar);
+
+	button("函数符文对应")
+		.on("click", () => {
+			const xel = view("y")
+				.style({
+					position: "fixed",
+					width: "100vw",
+					height: "100vh",
+					top: 0,
+					left: 0,
+					zIndex: 999,
+					color: "white",
+					background: "#000",
+				})
+				.addInto();
+			button("关闭")
+				.on("click", () => {
+					xel.remove();
+				})
+				.addInto(xel);
+			const l = view("y").style({ overflow: "scroll" }).addInto(xel);
+			for (const f of functionMap.keys()) {
+				const el = view("x");
+				el.add(txt(f));
+				const svg = createFontRect(24, x[f] ?? fontMap.undefined);
+				el.el.appendChild(svg);
+				l.add(el);
+			}
 		})
 		.addInto(sideBar);
 
