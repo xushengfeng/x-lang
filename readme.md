@@ -11,3 +11,7 @@
 数据存储为 JSON，可以使用 js 调用运行。
 
 java(script^2)
+
+可以把代码渲染为魔法阵。
+
+![代码魔法阵](https://youke1.picui.cn/s1/2025/11/11/69133ab5245cb.png)
