@@ -1746,7 +1746,7 @@ function renderMagic(rawfile: FileData) {
 			path.setAttribute("d", dParts.join(" "));
 			path.setAttribute("fill", "none");
 			path.setAttribute("stroke", mainColor);
-			path.setAttribute("stroke-width", "4");
+			path.setAttribute("stroke-width", "3");
 			path.setAttribute("stroke-linecap", "round");
 			path.setAttribute("stroke-linejoin", "round");
 			g.appendChild(path);
