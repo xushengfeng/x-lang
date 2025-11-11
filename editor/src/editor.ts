@@ -439,6 +439,69 @@ async function sleep(T: number) {
 	return new Promise((resolve) => setTimeout(resolve, T));
 }
 
+async function zip(text: string) {
+	const encoder = new TextEncoder();
+	const data = encoder.encode(text);
+
+	// 使用CompressionStream进行gzip压缩
+	const cs = new CompressionStream("gzip");
+	const writer = cs.writable.getWriter();
+	writer.write(data);
+	writer.close();
+	const compressed = await new Response(cs.readable).arrayBuffer();
+	const compressedArray = new Uint8Array(compressed);
+
+	return uint8ArrayToBase64Url(compressedArray);
+}
+
+async function unzip(base64Url: string) {
+	const compressedArray = base64UrlToUint8Array(base64Url);
+	const cs = new DecompressionStream("gzip");
+	const writer = cs.writable.getWriter();
+	writer.write(compressedArray as BufferSource);
+	writer.close();
+	const decompressed = await new Response(cs.readable).arrayBuffer();
+	return new TextDecoder().decode(decompressed);
+}
+
+function uint8ArrayToBase64(uint8Array: Uint8Array): string {
+	let binary = "";
+	const len = uint8Array.byteLength;
+	for (let i = 0; i < len; i++) {
+		binary += String.fromCharCode(uint8Array[i]);
+	}
+	return btoa(binary);
+}
+
+// Base64 转 Uint8Array (标准)
+function base64ToUint8Array(base64: string): Uint8Array {
+	const binaryString = atob(base64);
+	const len = binaryString.length;
+	const bytes = new Uint8Array(len);
+	for (let i = 0; i < len; i++) {
+		bytes[i] = binaryString.charCodeAt(i);
+	}
+	return bytes;
+}
+
+// Uint8Array 转 Base64 (URL安全)
+function uint8ArrayToBase64Url(uint8Array: Uint8Array): string {
+	return uint8ArrayToBase64(uint8Array)
+		.replace(/\+/g, "-")
+		.replace(/\//g, "_")
+		.replace(/=/g, "");
+}
+
+// Base64 转 Uint8Array (URL安全)
+function base64UrlToUint8Array(base64Url: string): Uint8Array {
+	// 添加padding
+	let base64 = base64Url.replace(/-/g, "+").replace(/_/g, "/");
+	while (base64.length % 4) {
+		base64 += "=";
+	}
+	return base64ToUint8Array(base64);
+}
+
 function renderFile(rawfile: FileData) {
 	const file = structuredClone(rawfile);
 	fileData = file;
@@ -1768,9 +1831,13 @@ function renderMagic(rawfile: FileData) {
 	}
 }
 
-function fileChange() {
+async function fileChange() {
 	const url = new URL(location.href);
-	url.searchParams.set("code", encodeURIComponent(JSON.stringify(fileData)));
+	url.searchParams.set(
+		"code",
+		encodeURIComponent(await zip(JSON.stringify(fileData))),
+	);
+	url.searchParams.set("zip", "gzip");
 	history.replaceState({}, "", url.href);
 }
 
@@ -1991,8 +2058,15 @@ const code = urlP.get("code");
 
 if (code)
 	try {
-		const f = JSON.parse(decodeURIComponent(code));
-		renderFile(f);
+		if (urlP.get("zip") === "gzip")
+			unzip(decodeURIComponent(code)).then((decompressed) => {
+				const f = JSON.parse(decompressed);
+				renderFile(f);
+			});
+		else {
+			const f = JSON.parse(decodeURIComponent(code));
+			renderFile(f);
+		}
 	} catch {
 		showExample();
 	}
