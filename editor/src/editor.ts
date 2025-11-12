@@ -1144,6 +1144,7 @@ function renderMagic(rawfile: FileData) {
 	type FontBh = FontZb[];
 	// 字形
 	type font = FontBh[];
+	type FontId = number & { _brand: "FontId" };
 	type FontX = number[]; // 下面基本笔画索引
 
 	const magicFontBaseX: FontZb[] = [1, 2, 3, 4, 5, 6, 7, 8, 9];
@@ -1171,10 +1172,16 @@ function renderMagic(rawfile: FileData) {
 		}
 	}
 	function genFontId(indexs: FontX) {
-		return indexs.sort((a, b) => a - b).join("-");
+		return indexs.map((i) => 2 ** i).reduce((a, b) => a + b, 0) as FontId;
 	}
-	function fontId2FontX(id: string): FontX {
-		return id.split("-").map((i) => Number(i));
+	function fontId2FontX(id: FontId): FontX {
+		const x: FontX = [];
+		for (let i = 0; i < 32; i++) {
+			if ((id & (1 << i)) !== 0) {
+				x.push(i);
+			}
+		}
+		return x;
 	}
 	function FontX2Font(f: FontX): font {
 		const x: font = [];
@@ -1578,7 +1585,7 @@ function renderMagic(rawfile: FileData) {
 
 			const pageSize = 1000;
 			const pointCount = view("x").addInto(xel).style({ gap: "4px" });
-			function fost(fid: string) {
+			function fost(fid: FontId) {
 				const el = view()
 					.style({ width: "48px", height: "48px" })
 					.on("click", () => {
@@ -2233,7 +2240,7 @@ function renderMagic(rawfile: FileData) {
 
 		async function findCanonicalStrokeCover(
 			targetPoints: Set<number>,
-			genMap: Map<string, Set<string>>,
+			genMap: Map<number, Set<number>>,
 		) {
 			if (targetPoints.size > 6) return [];
 			const result: number[][] = [];
@@ -2252,8 +2259,8 @@ function renderMagic(rawfile: FileData) {
 			// 从用上所有笔画开始，不断削减
 			result.push([...validStrokes]);
 			const todo: number[][] = [[...validStrokes]];
-			const notHasChild = new Set<string>();
-			const visited = new Set<string>();
+			const notHasChild = new Set<number>();
+			const visited = new Set<number>();
 
 			while (todo.length > 0) {
 				// biome-ignore lint/style/noNonNullAssertion: >0
@@ -2307,10 +2314,10 @@ function renderMagic(rawfile: FileData) {
 			return result;
 		}
 
-		const dt: Record<string, Map<string, Set<string>>> = {};
+		const dt: Record<string, Map<string, Set<FontId>>> = {};
 
 		const t = performance.now();
-		const genMap = new Map<string, Set<string>>();
+		const genMap = new Map<number, Set<number>>();
 		for (const [n, s] of Object.entries(magicFontPoints)) {
 			for (const ss of s) {
 				const p = new Set(ss.split("").map((i) => Number(i)));
