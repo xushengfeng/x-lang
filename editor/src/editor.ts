@@ -2231,177 +2231,110 @@ function renderMagic(rawfile: FileData) {
 
 		console.log(magicFontPoints);
 
-		async function findCanonicalStrokeCover(targetPoints: Set<number>) {
+		async function findCanonicalStrokeCover(
+			targetPoints: Set<number>,
+			genMap: Map<string, Set<string>>,
+		) {
+			if (targetPoints.size > 6) return [];
 			const result: number[][] = [];
 
-			// 找到所有端点都是目标点的笔画
+			// 预计算有效的笔画索引
 			const validStrokes: number[] = [];
 
 			for (let i = 0; i < magicFontBaseBh.length; i++) {
 				const stroke = magicFontBaseBh[i];
-				// 笔画的两个端点都必须在目标点集合中
 				if (targetPoints.has(stroke[0]) && targetPoints.has(stroke[1])) {
 					validStrokes.push(i);
 				}
 			}
+			if (validStrokes.length === 0) return [];
 
-			// 使用回溯法高效搜索最小覆盖
-			const coveredPoints = new Set<number>();
-			const currentSolution: number[] = [];
+			// 从用上所有笔画开始，不断削减
+			result.push([...validStrokes]);
+			const todo: number[][] = [[...validStrokes]];
+			const notHasChild = new Set<string>();
+			const visited = new Set<string>();
 
-			backtrack(
-				0,
-				coveredPoints,
-				currentSolution,
-				validStrokes,
-				targetPoints,
-				result,
-			);
+			while (todo.length > 0) {
+				// biome-ignore lint/style/noNonNullAssertion: >0
+				const parentStrokes = todo.shift()!;
+				const parentId = genFontId(parentStrokes);
 
-			await sleep(0);
+				if (visited.has(parentId)) continue;
+				visited.add(parentId);
 
-			// 在基础解的基础上继续生成变种：对每个已找到的解，
-			// 逐步将剩余的笔画加入，直到笔画用完，
-			// 并将所有超集（去重）加入结果
-			const seen = new Set<string>();
-			for (const r of result) {
-				seen.add(genFontId(r));
-			}
-			const expanded: number[][] = [];
-			const queue: number[][] = result.map((r) => [...r]);
-			if (targetPoints.size <= 5)
-				while (queue.length > 0) {
-					const base = queue.shift();
-					if (!base) continue;
-					// 计算剩余可加入的笔画
-					const remaining = validStrokes.filter((s) => !base.includes(s));
-					for (const s of remaining) {
-						const ns = [...base, s].sort((a, b) => a - b);
-						const id = genFontId(ns);
-						if (!seen.has(id)) {
-							seen.add(id);
-							expanded.push(ns);
-							queue.push(ns);
-						}
-					}
+				if (!genMap.has(parentId)) {
+					genMap.set(parentId, new Set());
 				}
 
-			// 把扩展结果合并回最终结果
-			for (const e of expanded) result.push(e);
+				// 尝试移除一个笔画
+				const strokesLength = parentStrokes.length;
+				for (let r = 0; r < strokesLength; r++) {
+					const newStrokes = new Array(strokesLength - 1);
+					for (let i = 0, j = 0; i < strokesLength; i++) {
+						if (i !== r) {
+							newStrokes[j++] = parentStrokes[i];
+						}
+					}
+
+					const id = genFontId(newStrokes);
+
+					if (notHasChild.has(id) || visited.has(id)) {
+						continue;
+					}
+
+					if (genMap.has(id)) {
+						continue;
+					}
+
+					// 检查覆盖的点
+					const coveredPoints = new Set<number>();
+					for (const si of newStrokes) {
+						const stroke = magicFontBaseBh[si];
+						coveredPoints.add(stroke[0]);
+						coveredPoints.add(stroke[1]);
+					}
+					if (coveredPoints.size < targetPoints.size) {
+						notHasChild.add(id);
+						continue;
+					}
+					genMap.get(parentId)?.add(id);
+					todo.push(newStrokes);
+					result.push(newStrokes);
+				}
+			}
 
 			return result;
 		}
 
-		function backtrack(
-			startIndex: number,
-			coveredPoints: Set<number>,
-			currentSolution: number[],
-			validStrokes: number[],
-			targetPoints: Set<number>,
-			result: number[][],
-		): void {
-			// 如果已经覆盖所有目标点，保存当前解
-			if (isAllCovered(coveredPoints, targetPoints)) {
-				result.push([...currentSolution]);
-				return;
-			}
-
-			// 如果已经遍历完所有笔画，返回
-			if (startIndex >= validStrokes.length) {
-				return;
-			}
-
-			// 剪枝：如果剩余笔画不足以覆盖未覆盖的点，提前返回
-			const uncoveredCount = countUncoveredPoints(coveredPoints, targetPoints);
-			const remainingStrokes = validStrokes.length - startIndex;
-			if (remainingStrokes < Math.ceil(uncoveredCount / 2)) {
-				return;
-			}
-
-			for (let i = startIndex; i < validStrokes.length; i++) {
-				const strokeIndex = validStrokes[i];
-				const stroke = magicFontBaseBh[strokeIndex];
-
-				// 计算这个笔画能覆盖的新点
-				const newPoints: number[] = [];
-				if (!coveredPoints.has(stroke[0])) newPoints.push(stroke[0]);
-				if (!coveredPoints.has(stroke[1])) newPoints.push(stroke[1]);
-
-				// 如果这个笔画没有覆盖新点，跳过（避免重复覆盖）
-				if (newPoints.length === 0) {
-					continue;
-				}
-
-				// 选择当前笔画
-				currentSolution.push(strokeIndex);
-				for (const point of newPoints) coveredPoints.add(point);
-
-				// 递归搜索
-				backtrack(
-					i + 1,
-					coveredPoints,
-					currentSolution,
-					validStrokes,
-					targetPoints,
-					result,
-				);
-
-				// 回溯
-				currentSolution.pop();
-				for (const point of newPoints) coveredPoints.delete(point);
-			}
-
-			// 也考虑不选择任何笔画的情况（继续搜索）
-			backtrack(
-				validStrokes.length,
-				coveredPoints,
-				currentSolution,
-				validStrokes,
-				targetPoints,
-				result,
-			);
-		}
-
-		function isAllCovered(
-			coveredPoints: Set<number>,
-			targetPoints: Set<number>,
-		): boolean {
-			for (const point of targetPoints) {
-				if (!coveredPoints.has(point)) {
-					return false;
-				}
-			}
-			return true;
-		}
-
-		function countUncoveredPoints(
-			coveredPoints: Set<number>,
-			targetPoints: Set<number>,
-		): number {
-			let count = 0;
-			for (const point of targetPoints) {
-				if (!coveredPoints.has(point)) {
-					count++;
-				}
-			}
-			return count;
-		}
-
 		const dt: Record<string, Map<string, Set<string>>> = {};
 
+		const t = performance.now();
+		const genMap = new Map<string, Set<string>>();
 		for (const [n, s] of Object.entries(magicFontPoints)) {
 			for (const ss of s) {
 				const p = new Set(ss.split("").map((i) => Number(i)));
 				if (!dt[n]) dt[n] = new Map();
 				if (!dt[n].has(ss)) dt[n].set(ss, new Set());
-				const r = await findCanonicalStrokeCover(p);
+				const r = await findCanonicalStrokeCover(p, genMap);
 				for (const rr of r) {
 					dt[n].get(ss)?.add(genFontId(rr));
 				}
 			}
 		}
+		console.log(performance.now() - t);
 
-		console.log(dt);
+		console.log(
+			dt,
+			Object.fromEntries(
+				Object.entries(dt).map(([k, v]) => [
+					k,
+					Array.from(v.values())
+						.map((i) => i.size)
+						.reduce((a, b) => a + b),
+				]),
+			),
+		);
 
 		return {
 			dt: dt,
