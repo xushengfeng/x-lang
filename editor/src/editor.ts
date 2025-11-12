@@ -1145,6 +1145,7 @@ function renderMagic(rawfile: FileData) {
 	// 字形
 	type font = FontBh[];
 	type FontId = number & { _brand: "FontId" };
+	type FontBhIndex = number & { _brand: "FontBhIndex" };
 	type FontX = number[]; // 下面基本笔画索引
 
 	const magicFontBaseX: FontZb[] = [1, 2, 3, 4, 5, 6, 7, 8, 9];
@@ -2237,6 +2238,66 @@ function renderMagic(rawfile: FileData) {
 			}
 		}
 
+		function symBack(index: number) {
+			// biome-ignore lint/style/noNonNullAssertion: ignore
+			return { 0: 0, 1: 3, 2: 2, 3: 1, 4: 4, 5: 5, 6: 6, 7: 7 }[index]!;
+		}
+		function sym(point: FontZb, actionIndex: number) {
+			// 编号与坐标转换
+			// 编号布局：
+			// 7 8 9
+			// 4 5 6
+			// 1 2 3
+			function idxToRC(n: number): [number, number] {
+				// x: 0..2 从左到右, y: 0..2 从下到上
+				const x = (n - 1) % 3;
+				const y = Math.floor((n - 1) / 3);
+				return [x, y];
+			}
+			function rcToIdx(x: number, y: number): number {
+				return y * 3 + x + 1;
+			}
+			// 8 种变换（基于坐标）
+			const transforms: Array<(x: number, y: number) => [number, number]> = [
+				// I: 恒等
+				(x, y) => [x, y],
+				// R90: 顺时针旋转90°
+				(x, y) => [2 - y, x],
+				// R180
+				(x, y) => [2 - x, 2 - y],
+				// R270
+				(x, y) => [y, 2 - x],
+				// Fx: 左右翻转（关于竖直中线）
+				(x, y) => [2 - x, y],
+				// Fy: 上下翻转（关于水平中线）
+				(x, y) => [x, 2 - y],
+				// Fmain: 主对角线翻转（y = x）
+				(x, y) => [y, x],
+				// Fanti: 副对角线翻转（y = -x + 2）
+				(x, y) => [2 - y, 2 - x],
+			];
+
+			return rcToIdx(...transforms[actionIndex](...idxToRC(point))) as FontZb;
+		}
+
+		const bhSymMap = new Map<FontBhIndex, Map<number, FontBhIndex>>(); // index -> actionIndex -> symIndex
+		for (let i = 0; i < magicFontBaseBh.length; i++) {
+			const stroke = magicFontBaseBh[i];
+			const actionMap = new Map<number, FontBhIndex>();
+			for (let actionIndex = 0; actionIndex < 8; actionIndex++) {
+				const p1 = sym(stroke[0], actionIndex);
+				const p2 = sym(stroke[1], actionIndex);
+				const foundIndex = magicFontBaseBh.findIndex(
+					(s2) =>
+						(s2[0] === p1 && s2[1] === p2) || (s2[0] === p2 && s2[1] === p1),
+				);
+				if (foundIndex >= 0) {
+					actionMap.set(actionIndex, foundIndex as FontBhIndex);
+				}
+			}
+			bhSymMap.set(i as FontBhIndex, actionMap);
+		}
+
 		console.log(magicFontPoints);
 
 		async function findCanonicalStrokeCover(
@@ -2282,7 +2343,7 @@ function renderMagic(rawfile: FileData) {
 				// 尝试移除一个笔画
 				const strokesLength = parentStrokes.length;
 				for (let r = 0; r < strokesLength; r++) {
-					const newStrokes = new Array(strokesLength - 1);
+					const newStrokes = new Array(strokesLength - 1) as number[];
 					for (let i = 0, j = 0; i < strokesLength; i++) {
 						if (i !== r) {
 							newStrokes[j++] = parentStrokes[i];
@@ -2321,55 +2382,14 @@ function renderMagic(rawfile: FileData) {
 
 		function group(points: string) {
 			// D4 对称群（正方形的全部 8 种对称变换）
-			const res = new Set<string>();
-
-			// 编号与坐标转换
-			// 编号布局：
-			// 7 8 9
-			// 4 5 6
-			// 1 2 3
-			function idxToRC(n: number): [number, number] {
-				// x: 0..2 从左到右, y: 0..2 从下到上
-				const x = (n - 1) % 3;
-				const y = Math.floor((n - 1) / 3);
-				return [x, y];
-			}
-			function rcToIdx(x: number, y: number): number {
-				return y * 3 + x + 1;
-			}
-
-			// 8 种变换（基于坐标）
-			const transforms: Array<(x: number, y: number) => [number, number]> = [
-				// I: 恒等
-				(x, y) => [x, y],
-				// R90: 顺时针旋转90°
-				(x, y) => [2 - y, x],
-				// R180
-				(x, y) => [2 - x, 2 - y],
-				// R270
-				(x, y) => [y, 2 - x],
-				// Fx: 左右翻转（关于竖直中线）
-				(x, y) => [2 - x, y],
-				// Fy: 上下翻转（关于水平中线）
-				(x, y) => [x, 2 - y],
-				// Fmain: 主对角线翻转（y = x）
-				(x, y) => [y, x],
-				// Fanti: 副对角线翻转（y = -x + 2）
-				(x, y) => [2 - y, 2 - x],
-			];
-
+			const res = new Map<string, number>();
 			function normalize(ns: number[]) {
 				return ns.sort((a, b) => a - b).join("");
 			}
 
-			const pArr = points.split("").map((i) => Number(i));
-			for (const tf of transforms) {
-				const mapped = pArr.map((n) => {
-					const [x, y] = idxToRC(n);
-					const [nx, ny] = tf(x, y);
-					return rcToIdx(nx, ny);
-				});
-				res.add(normalize(mapped));
+			const pArr = points.split("").map((i) => Number(i)) as FontZb[];
+			for (let i = 0; i < 8; i++) {
+				res.set(normalize(pArr.map((n) => sym(n, i))), i);
 			}
 
 			return Array.from(res);
@@ -2386,10 +2406,19 @@ function renderMagic(rawfile: FileData) {
 				if (!dt[pointCount]) dt[pointCount] = new Map();
 				if (!dt[pointCount].has(points)) dt[pointCount].set(points, new Set());
 				const symPoints = group(points);
-				const symMatch = symPoints.find((i) => calPoints.has(i));
+				const symMatch = symPoints.find(([i]) => calPoints.has(i));
 				if (symMatch) {
-					// dt[pointCount].set(points, dt[pointCount].get(symMatch)!);
-					// todo 对称变换
+					const a = symBack(symMatch[1]);
+					const s = new Set<FontId>();
+					for (const rr of dt[pointCount].get(symMatch[0])!) {
+						const bsh = fontId2FontX(rr);
+						const nbsh: FontX = [];
+						for (const i of bsh) {
+							nbsh.push(bhSymMap.get(i as FontBhIndex)!.get(a)!);
+						}
+						s.add(genFontId(nbsh));
+					}
+					dt[pointCount].set(points, s);
 					continue;
 				}
 				const r = await findCanonicalStrokeCover(p, genMap);
