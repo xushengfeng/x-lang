@@ -1193,7 +1193,6 @@ function renderMagic(rawfile: FileData) {
 		return x;
 	}
 
-	// todo 自动化生成
 	const xBase: Record<string, FontX> = {
 		"value.num": [0, 5, 10, 26, 27],
 		"ctrl.split": [12, 15, 22],
@@ -2242,9 +2241,8 @@ function renderMagic(rawfile: FileData) {
 
 		async function findCanonicalStrokeCover(
 			targetPoints: Set<number>,
-			genMap: Map<number, Set<number>>,
+			genMap: Set<number>,
 		) {
-			if (targetPoints.size > 6) return [];
 			const result: number[][] = [];
 
 			// 预计算有效的笔画索引
@@ -2257,6 +2255,8 @@ function renderMagic(rawfile: FileData) {
 				}
 			}
 			if (validStrokes.length === 0) return [];
+
+			if (targetPoints.size > 6) return [validStrokes];
 
 			// 从用上所有笔画开始，不断削减
 			result.push([...validStrokes]);
@@ -2273,8 +2273,11 @@ function renderMagic(rawfile: FileData) {
 				visited.add(parentId);
 
 				if (!genMap.has(parentId)) {
-					genMap.set(parentId, new Set());
+					genMap.add(parentId);
 				}
+
+				// todo判断是否存在对称。按笔画数分类，记录（元形状的引用，他的result）如何从那里变换过来
+				// 对称分析从7点开始
 
 				// 尝试移除一个笔画
 				const strokesLength = parentStrokes.length;
@@ -2292,6 +2295,7 @@ function renderMagic(rawfile: FileData) {
 						continue;
 					}
 
+					// 要么同级，已经计算过，要么上级，上级覆盖的点更少
 					if (genMap.has(id)) {
 						continue;
 					}
@@ -2307,13 +2311,12 @@ function renderMagic(rawfile: FileData) {
 						notHasChild.add(id);
 						continue;
 					}
-					genMap.get(parentId)?.add(id);
 					todo.push(newStrokes);
 					result.push(newStrokes);
 				}
 			}
 
-			return result;
+			return result.reverse();
 		}
 
 		function group(points: string) {
@@ -2375,7 +2378,7 @@ function renderMagic(rawfile: FileData) {
 		const dt: Record<string, Map<string, Set<FontId>>> = {};
 
 		const t = performance.now();
-		const genMap = new Map<number, Set<number>>();
+		const genMap = new Set<number>();
 		for (const [pointCount, pointsFamily] of Object.entries(magicFontPoints)) {
 			const calPoints = new Set<string>();
 			for (const points of pointsFamily) {
