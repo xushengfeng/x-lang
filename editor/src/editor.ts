@@ -2307,21 +2307,22 @@ function renderMagic(rawfile: FileData) {
 			const result: number[][] = [];
 
 			// 预计算有效的笔画索引
-			const validStrokes: number[] = [];
+			const validStrokes: FontBhIndex[] = [];
 
 			for (let i = 0; i < magicFontBaseBh.length; i++) {
 				const stroke = magicFontBaseBh[i];
 				if (targetPoints.has(stroke[0]) && targetPoints.has(stroke[1])) {
-					validStrokes.push(i);
+					validStrokes.push(i as FontBhIndex);
 				}
 			}
 			if (validStrokes.length === 0) return [];
 
+			// 点数过多时不计算
 			if (targetPoints.size > 6) return [validStrokes];
 
 			// 从用上所有笔画开始，不断削减
 			result.push([...validStrokes]);
-			const todo: number[][] = [[...validStrokes]];
+			const todo: FontBhIndex[][] = [[...validStrokes]];
 			const notHasChild = new Set<number>();
 			const visited = new Set<number>();
 
@@ -2337,13 +2338,10 @@ function renderMagic(rawfile: FileData) {
 					genMap.add(parentId);
 				}
 
-				// todo判断是否存在对称。按笔画数分类，记录（元形状的引用，他的result）如何从那里变换过来
-				// 对称分析从7点开始
-
 				// 尝试移除一个笔画
 				const strokesLength = parentStrokes.length;
 				for (let r = 0; r < strokesLength; r++) {
-					const newStrokes = new Array(strokesLength - 1) as number[];
+					const newStrokes = new Array(strokesLength - 1) as FontBhIndex[];
 					for (let i = 0, j = 0; i < strokesLength; i++) {
 						if (i !== r) {
 							newStrokes[j++] = parentStrokes[i];
