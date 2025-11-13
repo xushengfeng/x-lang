@@ -15,7 +15,7 @@ import {
 } from "dkh-ui";
 import { env, type NativeFunction, type XFunction } from "../../src/main";
 
-import { fibCode } from "../../test/test_data";
+import { callbackCode, fibCode } from "../../test/test_data";
 
 type DataItem = {
 	functionId: string;
@@ -65,9 +65,11 @@ class functionBlock {
 		inputs: [] as (NativeFunction["input"][number] & {
 			el: ElType<HTMLElement>;
 			defaultInput?: ElType<HTMLElement>;
+			cb?: string;
 		})[],
 		outputs: [] as (NativeFunction["output"][number] & {
 			el: ElType<HTMLElement>;
+			cb?: string;
 		})[],
 	};
 	private outLinks: {
@@ -137,84 +139,114 @@ class functionBlock {
 		const inputEl = view("y").addInto(slot);
 		const outputEl = view("y").style({ alignItems: "end" }).addInto(slot);
 
-		this.slots.inputs = fun.input.map((i) => {
-			const e = txt(`${i.name}:${i.type.type}`);
-			e.on("click", () => {
-				if (lastClick === null) {
-					const thisInputSlots = this.inLinks.filter((x) => x.toKey === i.name);
-					if (thisInputSlots.length === 1) {
-						const thisInputSlot = thisInputSlots[0];
-						thisInputSlot.from.unLinkTo(this, thisInputSlot.fromKey, i.name);
-						thisInputSlot.from.emit(
-							"linkAdd",
-							this,
-							thisInputSlot.fromKey,
-							i.name,
+		this.slots.inputs = fun.input
+			.concat(
+				Object.entries(fun.cb ?? {}).flatMap(([k, v]) => {
+					return v.output.map((o) => ({ ...o, cb: k }));
+				}),
+			)
+			.map((i) => {
+				const e = txt(`${i.name}:${i.type.type}`);
+				e.on("click", () => {
+					if (lastClick === null) {
+						const thisInputSlots = this.inLinks.filter(
+							(x) => x.toKey === i.name,
 						);
-						lastClick = {
-							type: "link",
-							block: thisInputSlot.from,
-							xType: "out",
-							key: thisInputSlot.fromKey,
-						};
-					} // 目前只能从to到from
-				} else if (lastClick.type === "link" && lastClick.xType === "in") {
-				} else if (lastClick.type === "link" && lastClick.xType === "out") {
-					const l = { ...lastClick };
-					const lastSlot = lastClick.block
-						.getSlots()
-						.outputs.find((o) => o.name === l.key);
-					if (lastSlot) {
-						if (
-							lastSlot.type.type === i.type.type ||
-							lastSlot.type.type === "any" ||
-							i.type.type === "any" ||
-							lastSlot.type.type === "auto" || // todo 计算auto
-							i.type.type === "auto" ||
-							lastSlot.type.type === "or"
-						) {
-							l.block.linkTo(this, l.key, i.name);
-							l.block.emit("linkAdd", this, l.key, i.name);
-							lastClick = null;
+						if (thisInputSlots.length === 1) {
+							const thisInputSlot = thisInputSlots[0];
+							thisInputSlot.from.unLinkTo(this, thisInputSlot.fromKey, i.name);
+							thisInputSlot.from.emit(
+								"linkAdd",
+								this,
+								thisInputSlot.fromKey,
+								i.name,
+							);
+							lastClick = {
+								type: "link",
+								block: thisInputSlot.from,
+								xType: "out",
+								key: thisInputSlot.fromKey,
+							};
+						} // 目前只能从to到from
+					} else if (lastClick.type === "link" && lastClick.xType === "in") {
+					} else if (lastClick.type === "link" && lastClick.xType === "out") {
+						const l = { ...lastClick };
+						const lastSlot = lastClick.block
+							.getSlots()
+							.outputs.find((o) => o.name === l.key);
+						if (lastSlot) {
+							if (
+								lastSlot.type.type === i.type.type ||
+								lastSlot.type.type === "any" ||
+								i.type.type === "any" ||
+								lastSlot.type.type === "auto" || // todo 计算auto
+								i.type.type === "auto" ||
+								lastSlot.type.type === "or"
+							) {
+								l.block.linkTo(this, l.key, i.name);
+								l.block.emit("linkAdd", this, l.key, i.name);
+								lastClick = null;
+							}
 						}
 					}
-				}
-				if (lastClick?.type === "bindIo" && lastClick.xType === "in") {
-					lastClick.cb(this.id, i.name);
-				}
-			});
-			let di: ElType<HTMLElement> | undefined;
-			if (
-				i.type.type === "bool" ||
-				i.type.type === "string" ||
-				i.type.type === "num"
-			) {
-				di = typedDataInput(i.type.type).on("change", () => {
-					this.emit("defaultValue", i.name, di?.gv);
+					if (lastClick?.type === "bindIo" && lastClick.xType === "in") {
+						lastClick.cb(this.id, i.name);
+					}
 				});
-			}
-			return { ...i, el: e, defaultInput: di };
-		});
-		this.slots.outputs = fun.output.map((o) => {
-			const e = txt(`${o.name}:${o.type.type}`).style({ cursor: "pointer" });
-			e.on("click", () => {
-				if (lastClick === null) {
-					lastClick = { type: "link", block: this, xType: "out", key: o.name };
-				} else if (lastClick.type === "link" && lastClick.xType === "out") {
-					lastClick = { type: "link", block: this, xType: "out", key: o.name };
-				} else if (lastClick.type === "link" && lastClick.xType === "in") {
+				let di: ElType<HTMLElement> | undefined;
+				if (
+					i.type.type === "bool" ||
+					i.type.type === "string" ||
+					i.type.type === "num"
+				) {
+					di = typedDataInput(i.type.type).on("change", () => {
+						this.emit("defaultValue", i.name, di?.gv);
+					});
 				}
-				if (lastClick?.type === "bindIo" && lastClick.xType === "out") {
-					lastClick.cb(this.id, o.name);
-				}
+				return { ...i, el: e, defaultInput: di };
 			});
-			return { ...o, el: e };
-		});
+		this.slots.outputs = fun.output
+			.concat(
+				Object.entries(fun.cb ?? {}).flatMap(([k, v]) => {
+					return v.input.map((o) => ({ ...o, cb: k }));
+				}),
+			)
+			.map((o) => {
+				const e = txt(`${o.name}:${o.type.type}`).style({ cursor: "pointer" });
+				e.on("click", () => {
+					if (lastClick === null) {
+						lastClick = {
+							type: "link",
+							block: this,
+							xType: "out",
+							key: o.name,
+						};
+					} else if (lastClick.type === "link" && lastClick.xType === "out") {
+						lastClick = {
+							type: "link",
+							block: this,
+							xType: "out",
+							key: o.name,
+						};
+					} else if (lastClick.type === "link" && lastClick.xType === "in") {
+					}
+					if (lastClick?.type === "bindIo" && lastClick.xType === "out") {
+						lastClick.cb(this.id, o.name);
+					}
+				});
+				return { ...o, el: e };
+			});
 
-		inputEl.add(
-			this.slots.inputs.map((i) => view("y").add(i.el).add(i.defaultInput)),
-		);
-		outputEl.add(this.slots.outputs.map((o) => o.el));
+		for (const i of this.slots.inputs) {
+			if (!i.cb) {
+				inputEl.add(view("y").add(i.el).add(i.defaultInput));
+			} else {
+				inputEl.add(i.el);
+			}
+		}
+		for (const o of this.slots.outputs) {
+			outputEl.add(o.el);
+		}
 
 		trackPoint(titleT, {
 			start: () => {
@@ -2664,6 +2696,26 @@ const example: Record<string, { name: string; d: FileData }> = {
 						fib2: { x: 933, y: 335 },
 						add: { x: 1175, y: 260 },
 						out: { x: 1430, y: 212 },
+					},
+				},
+			},
+		},
+	},
+	array: {
+		name: "数组操作 回调",
+		d: {
+			display: { type: "block" },
+			data: {
+				main: {
+					functionId: "main",
+					code: callbackCode,
+					geo: {
+						"0": { x: 113, y: 60 },
+						"1": { x: 404, y: 83 },
+						"2": { x: 243, y: 300 },
+						"3": { x: 635, y: 290 },
+						"10": { x: 846, y: 95 },
+						mapCb: { x: 600, y: 150 },
 					},
 				},
 			},

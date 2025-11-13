@@ -3,6 +3,7 @@ export {
 	newNativeFunction,
 	newFunction,
 	type XFunction,
+	type XType,
 	type NativeFunction,
 };
 
