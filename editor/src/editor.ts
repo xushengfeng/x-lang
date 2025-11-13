@@ -1088,7 +1088,9 @@ function renderEditor(rawfile: FileData) {
 							? false
 							: i.type.type === "num"
 								? 0
-								: undefined,
+								: i.type.type === "string"
+									? ""
+									: undefined,
 					]),
 				),
 			);
@@ -2622,6 +2624,11 @@ function showExample() {
 	);
 }
 
+const callbackCode2 = structuredClone(callbackCode);
+callbackCode2.data["2"].defaultValues = { repeatNum: 2 };
+callbackCode2.data["3"].defaultValues = { repeatNum: 2 };
+callbackCode2.input = callbackCode2.input.slice(0, 2);
+
 const example: Record<string, { name: string; d: FileData }> = {
 	start: {
 		name: "空白",
@@ -2708,7 +2715,7 @@ const example: Record<string, { name: string; d: FileData }> = {
 			data: {
 				main: {
 					functionId: "main",
-					code: callbackCode,
+					code: callbackCode2,
 					geo: {
 						"0": { x: 113, y: 60 },
 						"1": { x: 404, y: 83 },
