@@ -1104,7 +1104,11 @@ function renderEditor(rawfile: FileData) {
 				runInfo.clear();
 				const input = inputArea.gv;
 				const r = xlangEnv.run(page.code, input);
-				outputArea.sv(JSON.stringify(r, null, 2));
+				outputArea.sv(
+					Object.entries(r)
+						.map(([k, v]) => `${k}: ${JSON.stringify(v)}`)
+						.join("\n"),
+				);
 			});
 		const outputArea = textarea().style({ height: "150px" }).addInto(ioSetter);
 		button("动画")
